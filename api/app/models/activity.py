@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import REAL, BigInteger, DateTime, ForeignKey, Index, SmallInteger, Text, func
+from sqlalchemy import REAL, BigInteger, DateTime, ForeignKey, Index, SmallInteger, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,10 +12,7 @@ from app.models.base import Base
 class Interaction(Base):
     __tablename__ = "interactions"
     __table_args__ = (
-        Index(
-            "ix_interactions_user_id_created_at", "user_id", "created_at",
-            postgresql_ops={"created_at": "DESC"},
-        ),
+        Index("ix_interactions_user_id_created_at", "user_id", text("created_at DESC")),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
