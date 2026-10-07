@@ -2,7 +2,7 @@
 from datetime import date
 
 from sqlalchemy import (
-    CHAR, CheckConstraint, Computed, Date, ForeignKey, Index, Integer, Numeric, REAL,
+    CHAR, CheckConstraint, Date, ForeignKey, Index, Integer, Numeric, REAL,
     SmallInteger, String, Text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, TSVECTOR
@@ -10,15 +10,26 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
 
-# Full-text search: titles weigh most, then tagline, then overview.
-# The "simple" config (no stemming) is used because titles span many languages.
-SEARCH_VECTOR_SQL = (
-    "setweight(to_tsvector('simple'::regconfig, coalesce(title, '')), 'A') || "
-    "setweight(to_tsvector('simple'::regconfig, coalesce(original_title, '')), 'A') || "
-    "setweight(to_tsvector('simple'::regconfig, coalesce(tagline, '')), 'B') || "
-    "setweight(to_tsvector('simple'::regconfig, coalesce(overview, '')), 'C')"
-)
-
+# Full-text search (spec section 10): title + cast + director. Cast and directors live in
+# other tables, so the column is filled by the catalog loader (pipeline/loader.py) with
+# SEARCH_VECTOR_UPDATE_SQL rather than being a generated column.
+SEARCH_VECTOR_UPDATE_SQL = """
+UPDATE movies m SET search_vector =
+    setweight(to_tsvector('simple', coalesce(m.title, '')), 'A') ||
+    setweight(to_tsvector('simple', coalesce(m.original_title, '')), 'A') ||
+    setweight(to_tsvector('simple', coalesce(p.directors, '')), 'B') ||
+    setweight(to_tsvector('simple', coalesce(p.cast_names, '')), 'C')
+FROM (
+    SELECT mv.id,
+           string_agg(pe.name, ' ') FILTER (WHERE mc.role = 'director') AS directors,
+           string_agg(pe.name, ' ') FILTER (WHERE mc.role = 'cast') AS cast_names
+    FROM movies mv
+    LEFT JOIN movie_credits mc ON mc.movie_id = mv.id
+    LEFT JOIN people pe ON pe.id = mc.person_id
+    GROUP BY mv.id
+) p
+WHERE p.id = m.id
+"""
 
 class Movie(Base):
     __tablename__ = "movies"
@@ -54,7 +65,7 @@ class Movie(Base):
     rating_hist: Mapped[list[int] | None] = mapped_column(ARRAY(Integer))
     popularity_score: Mapped[float | None] = mapped_column(REAL)
     tmdb_vote_count: Mapped[int | None] = mapped_column(Integer)
-    search_vector = mapped_column(TSVECTOR, Computed(SEARCH_VECTOR_SQL, persisted=True))
+    search_vector = mapped_column(TSVECTOR)
 
 
 class Genre(Base):

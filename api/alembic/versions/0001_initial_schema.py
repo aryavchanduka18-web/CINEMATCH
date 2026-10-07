@@ -10,7 +10,13 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql as pg
 
-from app.models.catalog import SEARCH_VECTOR_SQL
+# Search vector as first created (title/tagline/overview); 0002 replaces it with title + cast + director.
+SEARCH_VECTOR_SQL = (
+    "setweight(to_tsvector('simple'::regconfig, coalesce(title, '')), 'A') || "
+    "setweight(to_tsvector('simple'::regconfig, coalesce(original_title, '')), 'A') || "
+    "setweight(to_tsvector('simple'::regconfig, coalesce(tagline, '')), 'B') || "
+    "setweight(to_tsvector('simple'::regconfig, coalesce(overview, '')), 'C')"
+)
 
 revision: str = "0001"
 down_revision: Union[str, None] = None

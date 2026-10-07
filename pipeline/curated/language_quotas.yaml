@@ -1,0 +1,17 @@
+# Catalog selection settings (spec section 4.2). Final values are reported in the Phase 2 report.
+part_a:
+  min_ratings: 50          # candidate floor; step 5 raises it so part A lands near target
+  target: 10000
+part_b:
+  languages: [hi, ta, te, ml, kn, bn, mr, ko, ja, es, fr, de, it, zh, cn, pt, tr, fa]
+  low_volume_languages: [kn, bn, mr]
+  min_votes: 50
+  min_votes_low_volume: 20
+  candidates_per_language: 400   # pulled from discover; films already in A are skipped
+  max_per_language: 300          # kept after the gate
+part_c:
+  months: 18
+  pool_min_votes: 50             # candidate pool; step 5 picks the threshold
+  start_min_votes: 100
+  target_min: 300
+  target_max: 500

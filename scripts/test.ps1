@@ -5,6 +5,9 @@ $failed = @()
 Write-Host "`n== engine tests ==" -ForegroundColor Cyan
 Push-Location (Join-Path $Root "engine"); & $Python -m pytest -q; if ($LASTEXITCODE -ne 0) { $failed += "engine" }; Pop-Location
 
+Write-Host "`n== pipeline tests ==" -ForegroundColor Cyan
+Push-Location (Join-Path $Root "pipeline"); & $Python -m pytest -q; if ($LASTEXITCODE -ne 0) { $failed += "pipeline" }; Pop-Location
+
 Write-Host "`n== api tests ==" -ForegroundColor Cyan
 Push-Location (Join-Path $Root "api"); & $Python -m pytest -q; if ($LASTEXITCODE -ne 0) { $failed += "api" }; Pop-Location
 

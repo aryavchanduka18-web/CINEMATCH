@@ -28,16 +28,6 @@ def test_migration_matches_models(test_engine):
     assert diff == []
 
 
-def test_search_vector_is_generated(test_engine):
-    with test_engine.begin() as conn:
-        conn.execute(text("insert into movies (tmdb_id, title, overview) values (-1, 'Spirited Away', 'a girl in a spirit world')"))
-        hit = conn.execute(
-            text("select title from movies where search_vector @@ plainto_tsquery('simple', 'spirited')")
-        ).scalar()
-        conn.execute(text("delete from movies where tmdb_id = -1"))
-    assert hit == "Spirited Away"
-
-
 def test_deleting_user_cascades_to_owned_rows(test_engine):
     with test_engine.begin() as conn:
         movie_id = conn.execute(text("insert into movies (tmdb_id, title) values (-2, 'X') returning id")).scalar()

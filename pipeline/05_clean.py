@@ -1,0 +1,138 @@
+"""Step 5: metadata gate, final catalog cut, cleaning, dominant colors, per-language report.
+
+Outputs (data/processed/): catalog_ids.csv, movies_clean.parquet, credits_clean.parquet,
+metadata_report.json.
+"""
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date
+
+import pandas as pd
+import yaml
+from tqdm import tqdm
+
+from pipeline.catalog import gate_failures, overview_words, parse_credits, parse_movie
+from pipeline.colors import dominant_color
+from pipeline.common import IMAGES_DIR, PROCESSED, TMDB_DIR, get_logger, read_json, write_json
+from pipeline.selection import select
+from pipeline.tmdb import TMDB
+
+log = get_logger("05_clean")
+CFG = yaml.safe_load((__import__("pathlib").Path(__file__).parent / "curated" / "language_quotas.yaml").read_text())
+MIN_LANGUAGE_FILMS = 150
+
+
+def load_candidates() -> tuple[pd.DataFrame, dict]:
+    cand = pd.read_csv(PROCESSED / "catalog_candidates.csv")
+    # A film found by several routes keeps its highest-priority part: A, then B, then C.
+    cand["prio"] = cand["part"].map({"A": 0, "B": 1, "C": 2})
+    cand = cand.sort_values("prio").drop_duplicates("tmdb_id").drop(columns="prio")
+    details = {}
+    rows = []
+    for rec in cand.itertuples(index=False):
+        path = TMDB_DIR / f"{rec.tmdb_id}.json"
+        detail = read_json(path) if path.exists() else {"_status": "missing"}
+        if "_status" in detail:
+            rows.append({"tmdb_id": rec.tmdb_id, "reasons": ["not_found_on_tmdb"]})
+            continue
+        details[rec.tmdb_id] = detail
+        reasons = gate_failures(detail)
+        if detail.get("adult"):
+            reasons.append("adult")
+        rows.append({"tmdb_id": rec.tmdb_id, "reasons": reasons,
+                     "release_date": detail.get("release_date") or None, "status": detail.get("status"),
+                     "original_language": (detail.get("original_language") or "").lower(),
+                     "vote_count_detail": detail.get("vote_count")})
+    gated = cand.merge(pd.DataFrame(rows), on="tmdb_id", how="left")
+    gated["passed"] = gated["reasons"].map(len) == 0
+    # Parts B/C use the detail vote count (fresher than the discover listing).
+    gated["tmdb_vote_count"] = gated["vote_count_detail"].fillna(gated["tmdb_vote_count"])
+    return gated, details
+
+
+def compute_colors(movies: pd.DataFrame) -> list[str | None]:
+    tmdb = TMDB(rate=40)
+
+    def one(row) -> str | None:
+        if row.backdrop_path:
+            size, path = "w300", row.backdrop_path
+        else:
+            size, path = "w342", row.poster_path
+        dest = IMAGES_DIR / size / path.lstrip("/")
+        local = tmdb.download_image(size, path, dest)
+        try:
+            return dominant_color(local) if local else None
+        except OSError:
+            return None
+
+    with ThreadPoolExecutor(8) as pool:
+        return list(tqdm(pool.map(one, movies.itertuples(index=False)), total=len(movies), mininterval=10))
+
+
+def language_report(gated: pd.DataFrame, movies: pd.DataFrame) -> dict:
+    report = {}
+    for lang, grp in movies.groupby("original_language"):
+        n = len(grp)
+        report[lang] = {
+            "films": n,
+            "by_part": grp["catalog_part"].value_counts().to_dict(),
+            "pct_backdrop": round(100 * grp["backdrop_path"].notna().mean(), 1),
+            "pct_logo": round(100 * grp["logo_path"].notna().mean(), 1),
+            "pct_tagline": round(100 * grp["tagline"].notna().mean(), 1),
+            "pct_keywords": round(100 * (grp["keywords"].map(len) > 0).mean(), 1),
+            "pct_certification": round(100 * grp["certification"].notna().mean(), 1),
+            "pct_runtime": round(100 * grp["runtime_min"].notna().mean(), 1),
+            "median_overview_words": int(grp["overview"].map(overview_words).median()),
+            "thin_text_films": int(grp["thin_text"].sum()),
+            "onboarding_eligible": n >= MIN_LANGUAGE_FILMS,
+        }
+    dropped = gated[~gated["passed"]]
+    for lang, grp in dropped.groupby(dropped["original_language"].fillna("unknown")):
+        entry = report.setdefault(lang, {"films": 0, "onboarding_eligible": False})
+        entry["dropped_by_gate"] = int(len(grp))
+        entry["drop_reasons"] = dict(Counter(r for rs in grp["reasons"] for r in rs).most_common())
+    return dict(sorted(report.items(), key=lambda kv: -kv[1]["films"]))
+
+
+def main() -> None:
+    summary = read_json(PROCESSED / "catalog_candidates_summary.json")
+    window = summary["part_c_window"]
+    gated, details = load_candidates()
+    catalog, chosen = select(gated, CFG, date.fromisoformat(window["start"]), date.fromisoformat(window["end"]))
+    log.info("selected %s with %s", catalog["part"].value_counts().to_dict(), chosen)
+
+    movies = pd.DataFrame([parse_movie(details[t]) for t in catalog["tmdb_id"]])
+    movies = movies.merge(catalog[["tmdb_id", "part", "ml_movie_id"]].rename(columns={"part": "catalog_part"}), on="tmdb_id")
+    movies["ml_movie_id"] = movies["ml_movie_id"].astype("Int64")
+    # Same IMDb id under two TMDB ids is a duplicate: keep the first (highest-priority part).
+    has_imdb = movies["imdb_id"].notna()
+    movies = pd.concat([movies[has_imdb].drop_duplicates("imdb_id"), movies[~has_imdb]], ignore_index=True)
+    movies["thin_text"] = (movies["overview"].map(overview_words) < 40) | (movies["keywords"].map(len) == 0)
+
+    log.info("computing dominant colors for %d films", len(movies))
+    movies["dominant_color"] = compute_colors(movies)
+
+    credits = pd.DataFrame([row for t in movies["tmdb_id"] for row in parse_credits(details[t])])
+    movies.to_parquet(PROCESSED / "movies_clean.parquet", index=False)
+    credits.to_parquet(PROCESSED / "credits_clean.parquet", index=False)
+    movies[["tmdb_id", "catalog_part", "ml_movie_id", "imdb_id"]].to_csv(PROCESSED / "catalog_ids.csv", index=False)
+
+    dropped = gated[~gated["passed"]]
+    write_json(PROCESSED / "metadata_report.json", {
+        "build_date": summary["build_date"],
+        "part_c_window": window,
+        "chosen_thresholds": chosen,
+        "catalog_size": len(movies),
+        "by_part": movies["catalog_part"].value_counts().to_dict(),
+        "part_b_by_language": movies[movies["catalog_part"] == "B"]["original_language"].value_counts().to_dict(),
+        "candidates": int(len(gated)),
+        "dropped_by_gate": int(len(dropped)),
+        "drop_reasons": dict(Counter(r for rs in dropped["reasons"] for r in rs).most_common()),
+        "onboarding_languages": sorted(movies["original_language"].value_counts().loc[lambda s: s >= MIN_LANGUAGE_FILMS].index),
+        "per_language": language_report(gated, movies),
+    })
+    log.info("catalog: %d films; dropped by gate: %d", len(movies), len(dropped))
+
+
+if __name__ == "__main__":
+    main()
