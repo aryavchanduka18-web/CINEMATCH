@@ -17,3 +17,6 @@ data/*
 !data/.gitkeep
 artifacts/*
 !artifacts/.gitkeep
+
+# Code graph (graphify)
+graphify-out/

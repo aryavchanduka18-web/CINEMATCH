@@ -51,7 +51,9 @@ def _labels(movies: pd.DataFrame, credits: pd.DataFrame) -> dict[str, list[list[
 def build_content_features(movies: pd.DataFrame, credits: pd.DataFrame,
                            weights: dict[str, float] | None = None) -> ContentFeatures:
     weights = {**DEFAULT_WEIGHTS, **(weights or {})}
-    vectorizer = TfidfVectorizer(stop_words="english", sublinear_tf=True, max_df=0.5, min_df=2,
+    # min_df=2 drops one-off words; skipped for tiny corpora (tests), where it would remove everything.
+    min_df = 2 if len(movies) >= 50 else 1
+    vectorizer = TfidfVectorizer(stop_words="english", sublinear_tf=True, max_df=0.5, min_df=min_df,
                                  ngram_range=(1, 2), dtype=np.float32)
     blocks = {"text": vectorizer.fit_transform(film_text(movies))}
     vocab = {"text": vectorizer.get_feature_names_out().tolist()}
@@ -62,7 +64,9 @@ def build_content_features(movies: pd.DataFrame, credits: pd.DataFrame,
 
     parts, columns, start = [], {}, 0
     for name in BLOCKS:
-        block = normalize(sp.csr_matrix(blocks[name]), norm="l2") * weights[name]
+        block = sp.csr_matrix(blocks[name])
+        if block.shape[1]:  # an empty block (no labels at all) has nothing to normalize
+            block = normalize(block, norm="l2") * weights[name]
         parts.append(block)
         columns[name] = (start, start + block.shape[1])
         start += block.shape[1]

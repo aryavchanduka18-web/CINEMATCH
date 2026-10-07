@@ -69,8 +69,8 @@ def load_catalog(engine: Engine, movies: pd.DataFrame, credits: pd.DataFrame,
     with engine.begin() as conn:
         _upsert(conn, t["movies"], _records(m, MOVIE_COLUMNS), "tmdb_id",
                 [c for c in MOVIE_COLUMNS if c != "tmdb_id"])
-        movie_id = dict(conn.execute(select(t["movies"].c.tmdb_id, t["movies"].c.id)
-                                     .where(t["movies"].c.tmdb_id.in_(m["tmdb_id"].tolist()))).all())
+        loaded = set(m["tmdb_id"].tolist())
+        movie_id = {k: v for k, v in conn.execute(select(t["movies"].c.tmdb_id, t["movies"].c.id)).all() if k in loaded}
         ids = list(movie_id.values())
 
         genre_names = sorted({g for gs in m["genres"] for g in gs})
@@ -79,17 +79,17 @@ def load_catalog(engine: Engine, movies: pd.DataFrame, credits: pd.DataFrame,
 
         kw_names = sorted({k for ks in m["keywords"] for k in ks})
         _upsert(conn, t["keywords"], [{"name": k} for k in kw_names], "name", [])
-        kw_id = dict(conn.execute(select(t["keywords"].c.name, t["keywords"].c.id)
-                                  .where(t["keywords"].c.name.in_(kw_names))).all()) if kw_names else {}
+        # Whole-table id maps: an IN (...) list of ~100k values exceeds the driver's parameter limit.
+        kw_id = dict(conn.execute(select(t["keywords"].c.name, t["keywords"].c.id)).all())
 
         people = credits.drop_duplicates("tmdb_person_id")
         _upsert(conn, t["people"], _records(people, ["tmdb_person_id", "name", "profile_path"]),
                 "tmdb_person_id", ["name", "profile_path"])
-        person_id = dict(conn.execute(select(t["people"].c.tmdb_person_id, t["people"].c.id)
-                                      .where(t["people"].c.tmdb_person_id.in_(people["tmdb_person_id"].tolist()))).all())
+        person_id = dict(conn.execute(select(t["people"].c.tmdb_person_id, t["people"].c.id)).all())
 
         for name in ("movie_genres", "movie_keywords", "movie_credits", "movie_awards"):
-            conn.execute(delete(t[name]).where(t[name].c.movie_id.in_(ids)))
+            for i in range(0, len(ids), CHUNK):
+                conn.execute(delete(t[name]).where(t[name].c.movie_id.in_(ids[i:i + CHUNK])))
 
         _insert(conn, t["movie_genres"], [{"movie_id": movie_id[r.tmdb_id], "genre_id": genre_id[g]}
                                           for r in m.itertuples() for g in dict.fromkeys(r.genres)])
@@ -106,6 +106,10 @@ def load_catalog(engine: Engine, movies: pd.DataFrame, credits: pd.DataFrame,
              "year": _clean(r.year), "result": r.result, "wikidata_id": r.wikidata_id}
             for r in aw.itertuples()])
 
+        # Fresh statistics first: without them the planner thinks these tables are empty and the
+        # search-vector join runs as a nested loop that takes many minutes on the full catalog.
+        for name in ("movies", "movie_credits", "people"):
+            conn.execute(text(f"ANALYZE {name}"))
         conn.execute(text(SEARCH_VECTOR_UPDATE_SQL))
 
         counts = {name: conn.execute(text(f"select count(*) from {name}")).scalar()

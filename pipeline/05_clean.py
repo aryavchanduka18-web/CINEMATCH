@@ -54,7 +54,7 @@ def compute_colors(movies: pd.DataFrame) -> list[str | None]:
     tmdb = TMDB(rate=40)
 
     def one(row) -> str | None:
-        if row.backdrop_path:
+        if isinstance(row.backdrop_path, str) and row.backdrop_path:  # missing = NaN
             size, path = "w300", row.backdrop_path
         else:
             size, path = "w342", row.poster_path
