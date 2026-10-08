@@ -3,7 +3,7 @@ and each loaded film's genres, keywords, credits and awards are replaced, never 
 import math
 
 import pandas as pd
-from sqlalchemy import Engine, MetaData, delete, select, text
+from sqlalchemy import Column, Engine, Integer, MetaData, Table, delete, select, text
 from sqlalchemy.dialects.postgresql import insert
 
 from app.models.catalog import SEARCH_VECTOR_UPDATE_SQL
@@ -16,6 +16,8 @@ MOVIE_COLUMNS = [
     "ml_rating_count", "ml_rating_mean", "rating_hist", "tmdb_vote_count",
 ]
 CHUNK = 2000
+USER_TABLES = ("onboarding_picks", "ratings", "reactions", "user_movie_list", "watched",
+               "interactions", "recommendation_logs")
 
 
 def _clean(value):
@@ -51,7 +53,7 @@ def _insert(conn, table, rows: list[dict]) -> None:
 
 
 def load_catalog(engine: Engine, movies: pd.DataFrame, credits: pd.DataFrame,
-                 awards: pd.DataFrame, aggregates: pd.DataFrame) -> dict[str, int]:
+                 awards: pd.DataFrame, aggregates: pd.DataFrame, prune: bool = True) -> dict[str, int]:
     """movies: movies_clean rows; credits: credits_clean rows; awards: awards.parquet rows;
     aggregates: per ml_movie_id count, mean, 10-bucket histogram (1..10 scale)."""
     md = MetaData()
@@ -112,7 +114,23 @@ def load_catalog(engine: Engine, movies: pd.DataFrame, credits: pd.DataFrame,
             conn.execute(text(f"ANALYZE {name}"))
         conn.execute(text(SEARCH_VECTOR_UPDATE_SQL))
 
+        # Films that left the catalog are removed, unless site users already reference them
+        # (deleting those would cascade into user data); kept ones are reported.
+        if prune:
+            conn.execute(text("CREATE TEMP TABLE keep_ids (tmdb_id int PRIMARY KEY) ON COMMIT DROP"))
+            _insert(conn, Table("keep_ids", MetaData(), Column("tmdb_id", Integer)),
+                    [{"tmdb_id": int(i)} for i in m["tmdb_id"]])
+            referenced = " OR ".join(f"EXISTS (SELECT 1 FROM {u} WHERE {u}.movie_id = movies.id)" for u in USER_TABLES)
+            stale = conn.execute(text(
+                f"DELETE FROM movies WHERE tmdb_id NOT IN (SELECT tmdb_id FROM keep_ids) AND NOT ({referenced})")).rowcount
+            kept = conn.execute(text(
+                f"SELECT count(*) FROM movies WHERE tmdb_id NOT IN (SELECT tmdb_id FROM keep_ids) AND ({referenced})")).scalar()
+
+        if prune:
+            counts_extra = {"removed_stale_movies": stale, "stale_movies_kept_for_user_data": kept}
+        else:
+            counts_extra = {}
         counts = {name: conn.execute(text(f"select count(*) from {name}")).scalar()
                   for name in ("movies", "genres", "movie_genres", "people", "movie_credits",
                                "keywords", "movie_keywords", "movie_awards")}
-    return counts
+    return {**counts, **counts_extra}

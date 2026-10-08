@@ -13,42 +13,57 @@ from tqdm import tqdm
 
 from pipeline.catalog import gate_failures, overview_words, parse_credits, parse_movie
 from pipeline.colors import dominant_color
+from pipeline.audit import write_catalog_audit
 from pipeline.common import IMAGES_DIR, PROCESSED, TMDB_DIR, get_logger, read_json, write_json
-from pipeline.selection import select
+from pipeline.selection import hollywood_rule, select
 from pipeline.tmdb import TMDB
 
 log = get_logger("05_clean")
-CFG = yaml.safe_load((__import__("pathlib").Path(__file__).parent / "curated" / "language_quotas.yaml").read_text())
+_HERE = __import__("pathlib").Path(__file__).parent
+CFG = yaml.safe_load((_HERE / "curated" / "language_quotas.yaml").read_text())
+CFG["hollywood"] = yaml.safe_load((_HERE / "catalog_config.yaml").read_text())["hollywood"]
 MIN_LANGUAGE_FILMS = 150
 
 
 def load_candidates() -> tuple[pd.DataFrame, dict]:
+    """One gated row per (candidate, part).
+
+    Parts A, B and C keep their original rule: a film found by several of those routes keeps only
+    its highest-priority part (A, then B, then C). Part D rows are kept separately, so a famous US
+    film that did not make A/B/C (for example too few MovieLens ratings) can still enter as D.
+    """
     cand = pd.read_csv(PROCESSED / "catalog_candidates.csv")
-    # A film found by several routes keeps its highest-priority part: A, then B, then C.
-    cand["prio"] = cand["part"].map({"A": 0, "B": 1, "C": 2})
-    cand = cand.sort_values("prio").drop_duplicates("tmdb_id").drop(columns="prio")
-    details = {}
-    rows = []
-    for rec in cand.itertuples(index=False):
-        path = TMDB_DIR / f"{rec.tmdb_id}.json"
+    abc = cand[cand["part"] != "D"].copy()
+    abc["prio"] = abc["part"].map({"A": 0, "B": 1, "C": 2})
+    abc = abc.sort_values("prio").drop_duplicates("tmdb_id").drop(columns="prio")
+    cand = pd.concat([abc, cand[cand["part"] == "D"].drop_duplicates("tmdb_id")], ignore_index=True)
+
+    details, rows = {}, []
+    for tmdb_id in cand["tmdb_id"].unique():
+        path = TMDB_DIR / f"{tmdb_id}.json"
         detail = read_json(path) if path.exists() else {"_status": "missing"}
         if "_status" in detail:
-            rows.append({"tmdb_id": rec.tmdb_id, "reasons": ["not_found_on_tmdb"]})
+            rows.append({"tmdb_id": tmdb_id, "reasons": ["not_found_on_tmdb"], "us_production": False,
+                         "in_collection": False})
             continue
-        details[rec.tmdb_id] = detail
+        details[tmdb_id] = detail
         reasons = gate_failures(detail)
         if detail.get("adult"):
             reasons.append("adult")
-        rows.append({"tmdb_id": rec.tmdb_id, "reasons": reasons,
-                     "release_date": detail.get("release_date") or None, "status": detail.get("status"),
+        release = detail.get("release_date") or None
+        rows.append({"tmdb_id": tmdb_id, "reasons": reasons, "title": detail.get("title"),
+                     "release_date": release, "year": int(release[:4]) if release else None,
+                     "status": detail.get("status"),
                      "original_language": (detail.get("original_language") or "").lower(),
-                     "vote_count_detail": detail.get("vote_count")})
+                     "vote_count_detail": detail.get("vote_count"),
+                     "us_production": any(c.get("iso_3166_1") == "US" for c in detail.get("production_countries", [])),
+                     "in_collection": bool(detail.get("belongs_to_collection"))})
     gated = cand.merge(pd.DataFrame(rows), on="tmdb_id", how="left")
     gated["passed"] = gated["reasons"].map(len) == 0
-    # Parts B/C use the detail vote count (fresher than the discover listing).
+    # Detail vote counts are fresher than the discover listings.
     gated["tmdb_vote_count"] = gated["vote_count_detail"].fillna(gated["tmdb_vote_count"])
+    gated["year"] = gated["year"].astype("Float64")
     return gated, details
-
 
 def compute_colors(movies: pd.DataFrame) -> list[str | None]:
     tmdb = TMDB(rate=40)
@@ -86,12 +101,20 @@ def language_report(gated: pd.DataFrame, movies: pd.DataFrame) -> dict:
             "thin_text_films": int(grp["thin_text"].sum()),
             "onboarding_eligible": n >= MIN_LANGUAGE_FILMS,
         }
-    dropped = gated[~gated["passed"]]
+    dropped = relevant_drops(gated)
     for lang, grp in dropped.groupby(dropped["original_language"].fillna("unknown")):
         entry = report.setdefault(lang, {"films": 0, "onboarding_eligible": False})
         entry["dropped_by_gate"] = int(len(grp))
         entry["drop_reasons"] = dict(Counter(r for rs in grp["reasons"] for r in rs).most_common())
     return dict(sorted(report.items(), key=lambda kv: -kv[1]["films"]))
+
+
+def relevant_drops(gated: pd.DataFrame) -> pd.DataFrame:
+    """Films that failed the gate and would otherwise have been eligible: every A/B/C candidate,
+    plus the part-D pool films that are US productions meeting the Hollywood rule."""
+    is_d = gated["part"] == "D"
+    d_relevant = is_d & gated["us_production"].fillna(False).astype(bool) & hollywood_rule(gated, CFG["hollywood"])
+    return gated[~gated["passed"] & (~is_d | d_relevant)].drop_duplicates("tmdb_id")
 
 
 def main() -> None:
@@ -117,7 +140,7 @@ def main() -> None:
     credits.to_parquet(PROCESSED / "credits_clean.parquet", index=False)
     movies[["tmdb_id", "catalog_part", "ml_movie_id", "imdb_id"]].to_csv(PROCESSED / "catalog_ids.csv", index=False)
 
-    dropped = gated[~gated["passed"]]
+    dropped = relevant_drops(gated)
     write_json(PROCESSED / "metadata_report.json", {
         "build_date": summary["build_date"],
         "part_c_window": window,
@@ -125,12 +148,18 @@ def main() -> None:
         "catalog_size": len(movies),
         "by_part": movies["catalog_part"].value_counts().to_dict(),
         "part_b_by_language": movies[movies["catalog_part"] == "B"]["original_language"].value_counts().to_dict(),
-        "candidates": int(len(gated)),
+        "candidates": int(gated["tmdb_id"].nunique()),
+        "part_notes": {"A": "MovieLens films", "B": "curated international", "C": "new & notable",
+                       "D": "Hollywood enrichment: famous US productions missing from A/B/C"},
+        "part_a_gate_pass_at_thresholds": {
+            str(t): int(((gated["part"] == "A") & gated["passed"] & (gated["ml_rating_count"] >= t)).sum())
+            for t in (50, 100, 154)},
         "dropped_by_gate": int(len(dropped)),
         "drop_reasons": dict(Counter(r for rs in dropped["reasons"] for r in rs).most_common()),
         "onboarding_languages": sorted(movies["original_language"].value_counts().loc[lambda s: s >= MIN_LANGUAGE_FILMS].index),
         "per_language": language_report(gated, movies),
     })
+    write_catalog_audit(gated, movies, CFG["hollywood"], date.fromisoformat(window["end"]))
     log.info("catalog: %d films; dropped by gate: %d", len(movies), len(dropped))
 
 

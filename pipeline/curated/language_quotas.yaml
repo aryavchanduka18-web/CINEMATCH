@@ -9,6 +9,13 @@ part_b:
   min_votes_low_volume: 20
   candidates_per_language: 400   # pulled from discover; films already in A are skipped
   max_per_language: 300          # kept after the gate
+  # Approved by Aryav 2026-10-08: these languages get a deeper pool so onboarding can offer them.
+  # Step 5 uses the HIGHEST vote floor (from min_votes down to boost_floor) at which the language
+  # reaches boost_target films in the catalog after the gate.
+  boost_languages: [ta, te, ml, kn]
+  boost_floor: 5
+  boost_target: 150
+  boost_candidates: 600
 part_c:
   months: 18
   pool_min_votes: 50             # candidate pool; step 5 picks the threshold

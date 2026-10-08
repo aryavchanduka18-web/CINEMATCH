@@ -48,3 +48,18 @@ def test_search_vector_has_title_cast_and_director(test_engine):
         assert hits("test film") == 1
         assert hits("dir one") == 1          # director
         assert hits("actor 3") == 1          # cast
+
+def test_loader_prunes_stale_films_but_keeps_ones_users_reference(test_engine):
+    movies, credits, awards, aggregates = _frames()
+    load_catalog(test_engine, movies, credits, awards, aggregates)
+    with test_engine.begin() as conn:
+        rated = conn.execute(text("select id from movies where tmdb_id = 900002")).scalar()
+        uid = conn.execute(text("insert into users (display_name) values ('p') returning id")).scalar()
+        conn.execute(text("insert into ratings (user_id, movie_id, rating) values (:u, :m, 9)"), {"u": uid, "m": rated})
+    # Catalog shrinks to nothing: 900001 is unreferenced and goes; 900002 has a rating and stays.
+    counts = load_catalog(test_engine, movies.iloc[0:0], credits.iloc[0:0], awards.iloc[0:0], aggregates)
+    with test_engine.begin() as conn:
+        left = {r[0] for r in conn.execute(text("select tmdb_id from movies where tmdb_id in (900001, 900002)"))}
+        conn.execute(text("delete from users where id = :u"), {"u": uid})
+    assert left == {900002}
+    assert counts["stale_movies_kept_for_user_data"] >= 1

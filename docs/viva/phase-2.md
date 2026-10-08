@@ -8,37 +8,52 @@ and the training data. Run it with `scripts\data.ps1` (or `python -m pipeline.ru
 | Step | What it does | Result on 2026-10-08 |
 |---|---|---|
 | 1 | Download MovieLens 32M and check its MD5 checksum | 32 million ratings, md5 verified |
-| 2 | Collect candidate films for parts A, B and C | 16,012 A + 4,544 B + 911 C candidates |
-| 3 | One TMDB call per candidate (details, credits, keywords, certifications, logos) | ~19,900 films cached |
-| 4 | Awards from Wikidata in bulk queries | 15,513 award rows for 3,933 catalog films |
-| 5 | Metadata gate, final cut, cleaning, dominant colors, report per language | 13,442 films |
+| 2 | Collect candidate films for parts A, B, C and D | 16,012 A + 6,221 B + 911 C + 5,007 D candidates |
+| 3 | One TMDB call per candidate (details, credits, keywords, certifications, logos) | every candidate cached |
+| 4 | Awards from Wikidata in bulk queries | 15,634 award rows for the catalog |
+| 5 | Metadata gate, final cut, cleaning, dominant colors, report per language, catalog audit | 13,987 films |
 | 6 | Ratings sample, scaled to 1-10 | 30,000 users, 4.61 million ratings |
 | 7 | Time splits and new-movie holdout | 70/10/20 per user; 500 holdout films |
-| 8 | Content features (TF-IDF + structured blocks) | 13,442 x 111,902 sparse matrix |
+| 8 | Content features (TF-IDF + structured blocks) | 13,987 x 115,181 sparse matrix |
 | 12 | Load the catalog into PostgreSQL | movies, genres, people, credits, keywords, awards |
 
 Every download is cached on disk, so re-running the pipeline never fetches anything twice.
 
-## 2. The catalog in three parts
+## 2. The catalog in four parts
 
 - **Part A, MovieLens films (9,995).** Films with enough MovieLens ratings to train collaborative
   filtering. We started at 50 ratings and raised the threshold until part A landed near 10,000:
   the final rule is **at least 154 ratings**.
-- **Part B, curated international (2,973).** TMDB "discover" per language (Hindi, Tamil, Telugu,
+- **Part B, international enrichment (3,302).** TMDB "discover" per language (Hindi, Tamil, Telugu,
   Malayalam, Kannada, Bengali, Marathi, Korean, Japanese, Spanish, French, German, Italian,
   Mandarin, Cantonese, Portuguese, Turkish, Persian), most-voted first, at most 300 per language.
-- **Part C, New & Notable (474).** Releases from the last 18 months (2025-04-08 to 2026-10-08)
-  with at least 110 TMDB votes.
+  Tamil, Telugu, Malayalam and Kannada use a lower vote minimum (Aryav, 2026-10-08) so they can reach
+  the 150-film onboarding rule: the pipeline picks the highest minimum that gets each language to 150
+  films (Tamil 44 votes, Telugu 27, Malayalam 31). Kannada stops at the floor of 5 votes with 127 films,
+  because TMDB simply has no more Kannada films that pass the gate.
+- **Part C, recent releases (474).** Releases from the 18 months before the catalog build date
+  (2025-04-08 to 2026-10-08) with at least 110 TMDB votes. MovieLens 32M stops in October 2023.
+- **Part D, Hollywood enrichment (216).** Famous US films missing from A, B and C. A US production
+  (co-productions count) qualifies with at least 2,000 TMDB votes, or at least 1,000 votes if it was
+  released before 1990 or belongs to a TMDB collection (a franchise). Most famous US films are already
+  in part A, so D is mainly the films released between mid-2023 and April 2025 (96 of the 216), which are
+  too new for MovieLens and too old for part C: for example Dune: Part Two, Deadpool & Wolverine,
+  Inside Out 2 and Wicked. The catalog audit (docs/catalog-audit.md) measures coverage: **995 of the
+  1,000 most-voted US films are in the catalog**; the 5 missing ones have English overviews shorter
+  than 15 words on TMDB.
 
-Parts B and C have **no MovieLens ratings**. Only their content (genres, story, cast, director),
+The **product catalog** (what the website shows) is all four parts. The **evaluation universe** (what
+the models are compared on) is only part A, so a bigger catalog never makes the model comparison unfair.
+
+Parts B, C and D have **no MovieLens ratings**. Only their content (genres, story, cast, director),
 their TMDB vote counts and live feedback on our site can recommend them. That is the
 **new-item cold-start problem**, and the content-based model is how we solve it.
 
 ## 3. The metadata gate (why some films are dropped)
 
 A film enters the catalog only if TMDB has: a poster, an English overview of at least 15 words,
-at least one genre, a director, and at least three cast members. 862 candidates failed, mostly
-for too few cast members (365) or a too-short overview (342); 162 no longer exist on TMDB.
+at least one genre, a director, and at least three cast members. 920 eligible candidates failed,
+mostly for a too-short overview (381) or too few cast members (368); 162 no longer exist on TMDB.
 
 We **drop** a film instead of filling in missing fields. Inventing data would make the
 recommendations and the explanations dishonest.
@@ -101,6 +116,6 @@ Content-based recommendation and our explanations depend on that metadata. A mad
 director would produce wrong recommendations and fake reasons.
 
 **Q5. Why does onboarding only offer some languages?**
-A language must have at least 150 films so a new user who picks it gets a full list. Twelve
-languages qualify (English, French, Italian, Japanese, Spanish, Mandarin, Korean, German,
-Portuguese, Hindi, Cantonese, Turkish). Tamil has 132, so it is just below the line.
+A language must have at least 150 films so a new user who picks it gets a full list. Fifteen
+languages qualify, including Hindi, Tamil, Telugu and Malayalam. Kannada has 127 films even at the
+lowest vote floor, so it is honestly reported as below the line rather than padded with weak data.

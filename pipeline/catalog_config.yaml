@@ -1,0 +1,10 @@
+# Part D "Hollywood enrichment" (approved by Aryav 2026-10-08).
+# A film is a candidate when 'US' is among its TMDB production countries (co-productions count).
+# It is added when it is not already in parts A, B or C, passes the metadata gate, is released,
+# and meets ONE of these rules (no minimum vote average: famous bad blockbusters still count):
+hollywood:
+  min_vote_count: 2000              # any year
+  classic_before_year: 1990
+  classic_min_vote_count: 1000      # released before 1990
+  collection_min_vote_count: 1000   # part of a TMDB collection (franchise)
+  pool_min_vote_count: 1000         # discover pool floor (the lowest rule above)

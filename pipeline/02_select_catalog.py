@@ -19,6 +19,7 @@ from pipeline.tmdb import TMDB
 
 log = get_logger("02_select")
 QUOTAS = yaml.safe_load((__import__("pathlib").Path(__file__).parent / "curated" / "language_quotas.yaml").read_text())
+HOLLYWOOD = yaml.safe_load((__import__("pathlib").Path(__file__).parent / "catalog_config.yaml").read_text())["hollywood"]
 
 
 def months_before(d: date, months: int) -> date:
@@ -75,8 +76,11 @@ def part_b(tmdb: TMDB) -> pd.DataFrame:
     rows = []
     for lang in cfg["languages"]:
         min_votes = cfg["min_votes_low_volume"] if lang in cfg["low_volume_languages"] else cfg["min_votes"]
+        limit = cfg["candidates_per_language"]
+        if lang in cfg.get("boost_languages", []):
+            min_votes, limit = cfg["boost_floor"], cfg["boost_candidates"]
         found = discover(
-            tmdb, f"lang_{lang}_v{min_votes}", cfg["candidates_per_language"],
+            tmdb, f"lang_{lang}_v{min_votes}", limit,
             with_original_language=lang, sort_by="vote_count.desc", include_adult="false",
             **{"vote_count.gte": min_votes, "primary_release_date.lte": build_date().isoformat()},
         )
@@ -103,6 +107,20 @@ def part_c(tmdb: TMDB) -> tuple[pd.DataFrame, dict]:
     return c, {"start": start.isoformat(), "end": end.isoformat()}
 
 
+def part_d(tmdb: TMDB) -> pd.DataFrame:
+    """Well-known films of any language with >= pool_min_vote_count votes. Whether 'US' is a
+    production country (and which rule applies) is decided from the detail JSON in step 5."""
+    floor = HOLLYWOOD["pool_min_vote_count"]
+    found = discover(
+        tmdb, f"famous_v{floor}_{build_date()}", 10_000, sort_by="vote_count.desc", include_adult="false",
+        **{"vote_count.gte": floor, "primary_release_date.lte": build_date().isoformat()},
+    )
+    log.info("part D pool: %d films with vote_count >= %d", len(found), floor)
+    d = pd.DataFrame([{"tmdb_id": m["id"], "tmdb_vote_count": m["vote_count"]} for m in found]).drop_duplicates("tmdb_id")
+    d["part"] = "D"
+    return d
+
+
 def main() -> None:
     PROCESSED.mkdir(parents=True, exist_ok=True)
     agg = ml_aggregates()
@@ -112,7 +130,8 @@ def main() -> None:
     tmdb = TMDB()
     b = part_b(tmdb)
     c, window = part_c(tmdb)
-    cand = pd.concat([a, b, c], ignore_index=True)
+    d = part_d(tmdb)
+    cand = pd.concat([a, b, c, d], ignore_index=True)
     cand["tmdb_id"] = cand["tmdb_id"].astype("int64")
     cand.to_csv(PROCESSED / "catalog_candidates.csv", index=False)
     write_json(PROCESSED / "catalog_candidates_summary.json", {

@@ -13,6 +13,8 @@ def main() -> None:
     credits = pd.read_parquet(PROCESSED / "credits_clean.parquet")
     awards = pd.read_parquet(PROCESSED / "awards.parquet")
     aggregates = pd.read_parquet(PROCESSED / "ml_aggregates.parquet")
+    if len(movies) < 1000:  # a broken earlier step must never prune the whole catalog
+        raise RuntimeError(f"movies_clean.parquet has only {len(movies)} films; refusing to load")
     engine = create_engine(env("DATABASE_URL"))
     counts = load_catalog(engine, movies, credits, awards, aggregates)
     engine.dispose()

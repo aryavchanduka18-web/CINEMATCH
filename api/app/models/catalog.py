@@ -34,7 +34,7 @@ WHERE p.id = m.id
 class Movie(Base):
     __tablename__ = "movies"
     __table_args__ = (
-        CheckConstraint("catalog_part IN ('A','B','C')", name="ck_movies_catalog_part"),
+        CheckConstraint("catalog_part IN ('A','B','C','D')", name="ck_movies_catalog_part"),
         Index("ix_movies_search_vector", "search_vector", postgresql_using="gin"),
     )
 
