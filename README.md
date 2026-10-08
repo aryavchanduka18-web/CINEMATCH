@@ -85,6 +85,13 @@ database running:
 .\.venv\Scripts\python.exe -m pipeline.demo_accounts       # the prepared demo account
 ```
 
+If only the catalog changes (for example the metadata gate), the models do not have to be retrained:
+```powershell
+.\scripts\data.ps1 -Only 5; .\scripts\data.ps1 -Only 12          # new catalog cut, load it
+.\.venv\Scripts\python.exe -m pipeline.extend_serving             # content rows + popularity for new films
+```
+Then restart the API so it reloads the catalog.
+
 Everything downloaded is cached in `data/raw/`, so re-running never fetches twice. Keep the laptop
 plugged in with the lid open during long runs (sleep pauses the jobs).
 
