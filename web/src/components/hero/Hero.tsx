@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useScroll, useTransform } from "framer-motion";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type { RecItem } from "../../api/types";
@@ -12,6 +12,11 @@ import ActionButtons from "../feedback/ActionButtons";
 export default function Hero({ items }: { items: RecItem[] }) {
   const [i, setI] = useState(0);
   const logEvent = useLogEvent();
+  // On scroll the hero compresses: the artwork drifts and dims, the text lifts (spec 8.5).
+  const { scrollY } = useScroll();
+  const artY = useTransform(scrollY, [0, 600], [0, 120]);
+  const artScale = useTransform(scrollY, [0, 600], [1, 1.06]);
+  const fade = useTransform(scrollY, [0, 500], [1, 0.35]);
   const item = items[i];
   useEffect(() => setI(0), [items.length]);
   useEffect(() => {
@@ -24,14 +29,14 @@ export default function Hero({ items }: { items: RecItem[] }) {
   return (
     <section className="relative h-[78vh] min-h-[520px] w-full overflow-hidden" aria-roledescription="carousel" aria-label="Top picks">
       <AnimatePresence initial={false}>
-        <motion.div key={m.id} className="absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        <motion.div key={m.id} className="absolute inset-0" style={{ y: artY, scale: artScale }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           transition={{ duration: 0.5 }}>
           <img src={tmdbImage(m.backdrop ?? m.poster, "w1280")} alt="" className="absolute inset-0 h-full w-full object-cover" />
           <div className="absolute inset-0" style={{ background: `linear-gradient(90deg, ${tint}cc 0%, ${tint}55 35%, transparent 70%)` }} />
           <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/30 to-black/30" />
         </motion.div>
       </AnimatePresence>
-      <div className="relative z-10 mx-auto flex h-full max-w-[1800px] flex-col justify-end px-4 pb-16 md:px-10 md:pb-24">
+      <motion.div style={{ opacity: fade }} className="relative z-10 mx-auto flex h-full max-w-[1800px] flex-col justify-end px-4 pb-16 md:px-10 md:pb-24">
         <AnimatePresence mode="wait">
           <motion.div key={m.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.45 }} className="max-w-2xl">
@@ -71,7 +76,7 @@ export default function Hero({ items }: { items: RecItem[] }) {
           <button aria-label="Next pick" onClick={() => setI((i + 1) % items.length)}
             className="grid h-9 w-9 place-items-center rounded-full border border-white/25 bg-black/30 backdrop-blur hover:bg-black/50">›</button>
         </div>
-      </div>
+      </motion.div>
     </section>
   );
 }

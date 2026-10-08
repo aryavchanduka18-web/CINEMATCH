@@ -90,3 +90,10 @@ def test_match_pct_is_capped_and_monotonic():
     cal = MatchCalibrator().fit("cold", np.linspace(0, 1, 200), np.linspace(0, 1, 200) > 0.4)
     pct = cal.match_pct("cold", np.array([0.0, 0.5, 1.0]))
     assert pct[0] < pct[1] <= pct[2] <= 99
+
+def test_a_source_with_no_information_proposes_nothing():
+    scores = {s: np.zeros((1, 6), dtype=np.float32) for s in SOURCES}     # empty profile everywhere
+    scores["popularity"][0] = [5, 4, 3, 2, 1, 0]
+    pool, norm = candidate_pool(scores, [np.array([], dtype=np.int64)], per_source=3)
+    assert sorted(pool[0][pool[0] >= 0].tolist()) == [0, 1, 2]              # only popularity proposed
+    assert norm[SOURCES.index("content")].max() == 0

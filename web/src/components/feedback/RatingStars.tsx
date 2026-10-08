@@ -1,3 +1,4 @@
+import { motion } from "framer-motion";
 import { useState } from "react";
 
 type Props = { value: number | null; onChange: (rating: number | null) => void; size?: number };
@@ -29,7 +30,10 @@ export default function RatingStars({ value, onChange, size = 28 }: Props) {
           </div>
         ))}
       </div>
-      <span className="text-sm tabular-nums text-muted">{shown ? `${shown}/10` : "Rate it"}</span>
+      <motion.span key={value ?? 0} initial={{ scale: value ? 1.25 : 1, color: value ? "#E0263F" : "#A7A7A7" }}
+        animate={{ scale: 1, color: "#A7A7A7" }} transition={{ duration: 0.35 }} className="text-sm tabular-nums">
+        {shown ? `${shown}/10` : "Rate it"}
+      </motion.span>
     </div>
   );
 }

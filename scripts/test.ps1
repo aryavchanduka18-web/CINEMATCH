@@ -11,6 +11,9 @@ Push-Location (Join-Path $Root "pipeline"); & $Python -m pytest -q; if ($LASTEXI
 Write-Host "`n== api tests ==" -ForegroundColor Cyan
 Push-Location (Join-Path $Root "api"); & $Python -m pytest -q; if ($LASTEXITCODE -ne 0) { $failed += "api" }; Pop-Location
 
+Write-Host "`n== scenario tests (spec section 16, live catalog) ==" -ForegroundColor Cyan
+Push-Location (Join-Path $Root "api"); & $Python -m pytest -q scenarios; if ($LASTEXITCODE -ne 0) { $failed += "scenarios" }; Pop-Location
+
 Write-Host "`n== web tests ==" -ForegroundColor Cyan
 Push-Location (Join-Path $Root "web"); npm test --silent; if ($LASTEXITCODE -ne 0) { $failed += "web" }; Pop-Location
 

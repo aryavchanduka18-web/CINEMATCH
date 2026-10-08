@@ -35,6 +35,9 @@ export default function Lab() {
       <Calibration />
       <CatalogAudit />
       <UserInspector />
+      <Shilling />
+      <TasteMap />
+      <Ncf />
     </div>
   );
 }
@@ -247,6 +250,82 @@ function UserInspector() {
             ))}</tbody>
           </table>
         </div>
+      )}
+    </Section>
+  );
+}
+function Shilling() {
+  type Res = { prediction_shift: number; hit_ratio_before: number; hit_ratio_after: number };
+  const q = useLab<{ results: { attack: string; size: number; fake_profiles: number; attacked: Record<string, Res>; defended: Record<string, Res>;
+    detection: { precision: number; recall: number; false_positive_rate: number; real_users_removed: number } }[] }>("shilling");
+  return (
+    <Section title="Shilling attack and defense (advanced)" note="Fake profiles push 5 little-known films. Prediction shift = how much the predicted rating of the targets rose (1-10 scale); hit ratio = share of real users who get a target in their top 10. The defense flags unusual profiles, removes them and retrains. Lab only: nothing on the website can be attacked.">
+      <Missing q={q} />
+      {q.data && (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[900px] text-sm">
+            <thead className="text-xs text-muted"><tr>
+              {["Attack", "Fake profiles", "Model", "Shift (attacked)", "Hit ratio before → attacked", "Shift (defended)", "Detection P / R", "Real users removed"].map((h) => <th key={h} className="py-2 pr-4 text-left font-medium">{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {q.data.results.flatMap((r) => Object.keys(r.attacked).map((m, i) => (
+                <tr key={`${r.attack}${r.size}${m}`} className={i === 0 ? "border-t border-white/10" : ""}>
+                  <td className="py-1.5 pr-4">{i === 0 ? `${r.attack}, ${(r.size * 100).toFixed(0)}%` : ""}</td>
+                  <td className="pr-4 tabular-nums">{i === 0 ? r.fake_profiles : ""}</td>
+                  <td className="pr-4">{NAMES[m] ?? m}</td>
+                  <td className="pr-4 tabular-nums">{r.attacked[m].prediction_shift.toFixed(2)}</td>
+                  <td className="pr-4 tabular-nums">{(100 * r.attacked[m].hit_ratio_before).toFixed(1)}% → {(100 * r.attacked[m].hit_ratio_after).toFixed(1)}%</td>
+                  <td className="pr-4 tabular-nums">{r.defended[m].prediction_shift.toFixed(2)}</td>
+                  <td className="pr-4 tabular-nums">{i === 0 ? `${(100 * r.detection.precision).toFixed(0)}% / ${(100 * r.detection.recall).toFixed(0)}%` : ""}</td>
+                  <td className="tabular-nums">{i === 0 ? r.detection.real_users_removed : ""}</td>
+                </tr>
+              )))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Section>
+  );
+}
+
+function TasteMap() {
+  const [uid, setUid] = useState("");
+  const q = useQuery({ queryKey: ["lab", "taste", uid], retry: false,
+    queryFn: get<{ points: { x: number; y: number; title: string; genre: string }[]; explained_variance_ratio: number[]; you?: { x: number; y: number; ratings_used: number } }>(`/lab/taste-map${uid ? `?user_id=${uid}` : ""}`) });
+  const [hover, setHover] = useState<string | null>(null);
+  if (q.isError) return <Section title="Taste map (advanced)"><p className="text-sm text-muted">Not produced yet.</p></Section>;
+  const pts = q.data?.points ?? [];
+  const genres = Array.from(new Set(pts.map((p) => p.genre))).slice(0, 8);
+  const color = (g: string) => COLORS[genres.indexOf(g)] ?? "#555";
+  const xs = pts.map((p) => p.x).concat(q.data?.you ? [q.data.you.x] : []), ys = pts.map((p) => p.y).concat(q.data?.you ? [q.data.you.y] : []);
+  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  const W = 700, H = 460, sx = (x: number) => 10 + ((x - x0) / (x1 - x0 || 1)) * (W - 20), sy = (y: number) => H - 10 - ((y - y0) / (y1 - y0 || 1)) * (H - 20);
+  return (
+    <Section title="Taste map (advanced)" note={`PCA of the SVD film vectors to 2D, colored by main genre. A user is placed with the same projection. The two axes explain ${q.data ? (100 * q.data.explained_variance_ratio[0]).toFixed(1) : "–"}% and ${q.data ? (100 * q.data.explained_variance_ratio[1]).toFixed(1) : "–"}% of the variance, so it is a rough picture of the model, not a recommender.`}>
+      <form className="mb-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); setUid((e.currentTarget.elements.namedItem("tuid") as HTMLInputElement).value); }}>
+        <input name="tuid" placeholder="Place user id" className="w-36 rounded-md border border-white/15 bg-surface-2 px-3 py-2 text-sm" />
+        <button className="rounded-md border border-white/20 px-4 py-2 text-sm">Place</button>
+        {hover && <span className="self-center text-sm text-muted">{hover}</span>}
+      </form>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full rounded-lg bg-surface" role="img" aria-label="Taste map">
+        {pts.map((p, i) => <circle key={i} cx={sx(p.x)} cy={sy(p.y)} r="2.2" fill={color(p.genre)} opacity="0.75" onMouseEnter={() => setHover(`${p.title} · ${p.genre}`)} />)}
+        {q.data?.you && <g><circle cx={sx(q.data.you.x)} cy={sy(q.data.you.y)} r="8" fill="none" stroke="#C8102E" strokeWidth="3" /><text x={sx(q.data.you.x) + 12} y={sy(q.data.you.y) + 4} fill="#fff" fontSize="14" fontWeight="600">You</text></g>}
+      </svg>
+      <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted">{genres.map((g) => <span key={g} className="flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: color(g) }} />{g}</span>)}</div>
+    </Section>
+  );
+}
+
+function Ncf() {
+  const q = useLab<{ ranking: Record<string, CI | number>; compare_ndcg: Record<string, number>; evaluated_users: number }>("ncf");
+  return (
+    <Section title="Neural Collaborative Filtering (advanced)" note="NeuMF (GMF + MLP) trained on positives with 4 sampled negatives, evaluated with exactly the same full-ranking protocol on the test split. Lab only: it has no cheap fold-in for new users, so the website never serves it.">
+      <Missing q={q} />
+      {q.data && (
+        <p className="text-sm">
+          NCF NDCG@10 <b>{(q.data.ranking.ndcg as CI).mean.toFixed(4)}</b> [{(q.data.ranking.ndcg as CI).ci_low.toFixed(4)}, {(q.data.ranking.ndcg as CI).ci_high.toFixed(4)}]
+          {" "}· for comparison: {Object.entries(q.data.compare_ndcg).map(([k, v]) => `${NAMES[k] ?? k} ${v.toFixed(4)}`).join(" · ")}
+        </p>
       )}
     </Section>
   );

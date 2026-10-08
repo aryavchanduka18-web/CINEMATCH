@@ -70,14 +70,45 @@ If PowerShell refuses to run the scripts below, allow local scripts for your use
 
 To stop: press `Ctrl+C` in the API and website windows, then run `.\scripts\db.ps1 stop`.
 
+## Building the data and the models (once, about 1-2 hours)
+
+The website needs the catalog in the database and the trained models in `artifacts/`. With the
+database running:
+
+```powershell
+.\scripts\data.ps1              # steps 1-12: download, TMDB, Wikidata, clean, ratings, splits,
+                                # features, train + tune models, hybrid weights, evaluation, DB load
+.\.venv\Scripts\python.exe -m pipeline.13_shilling     # optional lab experiments
+.\.venv\Scripts\python.exe -m pipeline.14_taste_map
+.\.venv\Scripts\python.exe -m pipeline.15_ncf
+.\.venv\Scripts\python.exe -m pipeline.report_validation   # refresh docs/phase-*-results.md
+.\.venv\Scripts\python.exe -m pipeline.demo_accounts       # the prepared demo account
+```
+
+Everything downloaded is cached in `data/raw/`, so re-running never fetches twice. Keep the laptop
+plugged in with the lid open during long runs (sleep pauses the jobs).
+
+## Where things are
+
+| What | Where |
+|---|---|
+| The approved spec | `docs/spec.md` |
+| Results tables per phase | `docs/phase-3-results.md` ... `docs/phase-6-results.md` |
+| Viva notes per phase | `docs/viva/` |
+| Architecture overview | `docs/architecture.md` |
+| Demo script | `docs/demo-script.md` |
+| Decisions made during the build | `docs/decisions-log.md` |
+| Things to check by hand at the end | `docs/final-checks.md` |
+| Catalog coverage audit | `docs/catalog-audit.md` |
+| Research Lab (in the app) | http://localhost:5173/lab |
+
 ## Tests
 
 With the database running:
 ```powershell
 .\scripts\test.ps1
 ```
-This runs the engine tests, the API tests (against a separate `cinematch_test` database that is
-rebuilt on every run, so your real data is never touched) and the website tests.
+This runs the engine, pipeline and API tests (the API tests use a separate `cinematch_test` database\nthat is rebuilt on every run), the 12 scenario tests of spec section 16 (on the real catalog, with\nthrowaway users that are deleted afterwards) and the website tests.
 
 ## Ports
 

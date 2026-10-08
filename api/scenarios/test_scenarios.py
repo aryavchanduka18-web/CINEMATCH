@@ -1,0 +1,125 @@
+"""The 12 scenario tests of spec section 16."""
+import numpy as np
+
+from conftest import films_in, find, genre_ids, genres_of, onboard, top_ids
+
+CRIME_LIKE = {"Crime", "Thriller", "Mystery"}
+
+
+def test_1_new_user_is_cold_and_gets_relevant_films(client):
+    onboard(client, films_in("Crime", "Thriller"), liked=genre_ids("Crime", "Thriller"))
+    me = client.get("/api/me").json()["counts"]
+    assert (me["stage"], me["onboarding_count"], me["behavioral_count"]) == ("cold", 5, 0)
+    home = client.get("/api/recs/home").json()
+    ids = top_ids(home)
+    g = genres_of(ids)
+    share = np.mean([bool(g[i] & CRIME_LIKE) for i in ids])
+    assert share >= 0.5, f"only {share:.0%} of the top 20 are crime, thriller or mystery"
+
+
+def test_2_views_never_change_the_stage_but_3_ratings_do(client):
+    onboard(client, films_in("Crime", "Thriller"))
+    for m in films_in("Comedy", n=11):
+        client.post("/api/events", json={"movie_id": m, "event_type": "detail_view"})
+    assert client.get("/api/me").json()["counts"]["stage"] == "cold"
+    cold_weights = client.get(f"/api/lab/user/{client.user_id}/candidates").json()["weights"]
+    for m in films_in("Drama", n=3):
+        client.put(f"/api/ratings/{m}", json={"rating": 8})
+    assert client.get("/api/me").json()["counts"]["stage"] == "warming"
+    assert client.get(f"/api/lab/user/{client.user_id}/candidates").json()["weights"] != cold_weights
+
+
+def test_3_established_users_lean_on_collaborative_sources(client):
+    onboard(client, films_in("Crime", "Thriller"))
+    for m in films_in("Drama", n=16, min_votes=2000):
+        client.put(f"/api/ratings/{m}", json={"rating": 8})
+    insp = client.get(f"/api/lab/user/{client.user_id}/candidates").json()
+    assert insp["stage"] == "established"
+    w = insp["weights"]
+    assert w["item_cf"] + w["user_cf"] + w["svd"] + w["als"] > 0.5
+
+
+def test_4_rating_changes_the_list(client):
+    onboard(client, films_in("Comedy", "Romance"))
+    before = top_ids(client.get("/api/recs/home").json())
+    for m in films_in("Crime", "Thriller", n=3):
+        client.put(f"/api/ratings/{m}", json={"rating": 10})
+    after = top_ids(client.get("/api/recs/home").json())
+    assert before != after
+    g = genres_of(after)
+    assert sum(bool(g[i] & {"Crime", "Thriller"}) for i in after) >= 5
+
+
+def test_5_disliked_film_and_genre_disappear(client):
+    onboard(client, films_in("Crime", "Thriller"), disliked=genre_ids("Horror"))
+    home = client.get("/api/recs/home").json()
+    victim = top_ids(home)[0]
+    client.put(f"/api/reactions/{victim}", json={"value": -1})
+    home = client.get("/api/recs/home").json()
+    shown = [i["movie"]["id"] for r in home["rails"] for i in r["items"]] + [i["movie"]["id"] for i in home["hero"]]
+    assert victim not in shown
+    personal = [i["movie"]["id"] for r in home["rails"] if r["key"] in ("top_picks", "different") for i in r["items"]]
+    assert not any("Horror" in g for g in genres_of(personal).values())
+
+
+def test_6_my_list_raises_similar_films(client):
+    onboard(client, films_in("Comedy"))
+    film = films_in("Animation", "Family", n=1)[0]
+    sim = client.get(f"/api/movies/{film}/similar").json()["items"][0]["movie"]["id"]
+    before = client.get(f"/api/recs/explain/{sim}").json()["match_pct"] or 0
+    client.put(f"/api/list/{film}")
+    after = client.get(f"/api/recs/explain/{sim}").json()["match_pct"] or 0
+    assert after >= before
+
+
+def test_7_discover_mode_is_more_diverse(client):
+    onboard(client, films_in("Action", "Adventure"))
+    for m in films_in("Action", n=12):
+        client.put(f"/api/ratings/{m}", json={"rating": 9})
+    def diversity(mode):
+        home = client.get(f"/api/recs/home?mode={mode}").json()
+        ids = top_ids(home, 15)
+        g = genres_of(ids)
+        return len(set().union(*g.values()))
+    assert diversity("discover") >= diversity("familiar")
+
+
+def test_8_new_movie_can_reach_rails_through_content(client):
+    onboard(client, films_in("Action", "Science Fiction"))
+    home = client.get("/api/recs/home").json()
+    parts = [i["movie"]["catalog_part"] for r in home["rails"] for i in r["items"]]
+    assert "C" in parts
+
+
+def test_9_because_you_liked_prisoners_is_sensible(client):
+    prisoners = find("SELECT id FROM movies WHERE title = 'Prisoners' AND year = 2013")
+    assert prisoners, "Prisoners (2013) is in the catalog"
+    sims = client.get(f"/api/movies/{prisoners[0]}/similar").json()["items"]
+    g = genres_of([s["movie"]["id"] for s in sims[:10]])
+    assert sum(bool(x & CRIME_LIKE) for x in g.values()) >= 6
+
+
+def test_10_prepared_account_has_neighbors(client):
+    onboard(client, films_in("Crime", "Thriller"))
+    for m in films_in("Drama", n=25, min_votes=2000) + films_in("Crime", n=15, min_votes=2000):
+        client.put(f"/api/ratings/{m}", json={"rating": 9})
+    home = client.get("/api/recs/home").json()
+    assert any(r["key"] == "people_like_you" and len(r["items"]) >= 8 for r in home["rails"])
+
+
+def test_11_no_duplicates_on_home(client):
+    onboard(client, films_in("Crime", "Thriller"))
+    home = client.get("/api/recs/home").json()
+    ids = [i["movie"]["id"] for r in home["rails"] for i in r["items"]] + [i["movie"]["id"] for i in home["hero"]]
+    assert len(ids) == len(set(ids))
+
+
+def test_12_every_reason_has_at_least_20_percent(client):
+    onboard(client, films_in("Crime", "Thriller"))
+    for m in films_in("Crime", n=5):
+        client.put(f"/api/ratings/{m}", json={"rating": 9})
+    home = client.get("/api/recs/home").json()
+    for item in home["hero"] + [i for r in home["rails"] if r["key"] == "top_picks" for i in r["items"]]:
+        for reason in item["reasons"]:
+            if reason["source"] not in ("preferences", "rerank"):
+                assert reason["share"] >= 0.2

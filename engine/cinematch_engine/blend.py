@@ -23,6 +23,10 @@ def candidate_pool(scores: dict[str, np.ndarray], excluded: list[np.ndarray], pe
         proposed = {}
         for s in SOURCES:
             sc = scores[s][u].copy()
+            finite = sc[np.isfinite(sc)]
+            if finite.size == 0 or finite.max() - finite.min() < 1e-9:
+                proposed[s] = np.array([], dtype=np.int64)   # no information about this user: propose nothing
+                continue
             sc[excluded[u]] = -np.inf
             top = np.argpartition(-sc, per_source)[:per_source]
             top = top[np.isfinite(sc[top])]
