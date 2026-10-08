@@ -114,7 +114,8 @@ def main() -> None:
     data.train.sort_indices()
     data.train_times = times.data
 
-    if not (MODELS / "fitted.npz").exists():
+    import sys
+    if "--refit" in sys.argv or not (MODELS / "fitted.npz").exists():
         save_models(data)
     content_sim = universe_content_sim(data)
     sources = load_sources(data, content_sim)

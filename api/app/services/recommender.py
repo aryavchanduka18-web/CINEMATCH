@@ -1,0 +1,109 @@
+"""Wraps cinematch_engine for API requests.
+
+At startup (first use) it loads the offline artifacts (fitted models, tuned content features,
+stage weights, Match % calibrator) and the catalog from Postgres, and builds one OnlineEngine.
+Per request, it reads the user's current state from Postgres (ratings, reactions, list, watched,
+onboarding, events) and asks the engine. Nothing personal is cached (spec 6.12 freshness).
+"""
+import json
+import threading
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+import joblib
+import numpy as np
+import pandas as pd
+import scipy.sparse as sp
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from cinematch_engine.online import Catalog, OnlineEngine, UserState
+from cinematch_engine.profile import BEHAVIORAL_EVENTS
+from cinematch_engine.sources import SourceModels
+
+ROOT = Path(__file__).resolve().parents[3]
+MODELS = ROOT / "artifacts" / "models"
+_lock = threading.Lock()
+_engine: OnlineEngine | None = None
+
+
+def artifacts_ready() -> bool:
+    return all((MODELS / f).exists() for f in ("fitted.npz", "content_matrix.npz", "content_rows.parquet",
+                                              "hybrid_weights.json", "calibration.joblib", "train_ratings.npz"))
+
+
+def _settings(name: str) -> dict:
+    return json.loads((MODELS / f"{name}.json").read_text())["settings"]
+
+
+def load_engine(db: Session) -> OnlineEngine:
+    global _engine
+    with _lock:
+        if _engine is not None:
+            return _engine
+        rows = pd.read_parquet(MODELS / "content_rows.parquet")
+        content = sp.load_npz(MODELS / "content_matrix.npz").tocsr()
+        movies = pd.DataFrame(db.execute(text("""
+            SELECT m.id, m.tmdb_id, m.title, m.original_language, m.runtime_min, m.year, m.catalog_part,
+                   coalesce(m.popularity_score, 0) AS popularity, coalesce(m.tmdb_vote_count, 0) AS votes,
+                   coalesce(array_agg(DISTINCT g.name) FILTER (WHERE g.name IS NOT NULL), '{}') AS genres,
+                   coalesce(array_agg(DISTINCT k.name) FILTER (WHERE k.name IS NOT NULL), '{}') AS keywords,
+                   bool_or(a.id IS NOT NULL AND a.award NOT ILIKE 'Golden Raspberry%') AS has_award
+            FROM movies m
+            LEFT JOIN movie_genres mg ON mg.movie_id = m.id LEFT JOIN genres g ON g.id = mg.genre_id
+            LEFT JOIN movie_keywords mk ON mk.movie_id = m.id LEFT JOIN keywords k ON k.id = mk.keyword_id
+            LEFT JOIN movie_awards a ON a.movie_id = m.id
+            GROUP BY m.id
+        """)).mappings().all())
+        movies = rows.merge(movies, on="tmdb_id", how="inner").sort_values("row")
+        content = content[movies["row"].to_numpy()]
+        f = np.load(MODELS / "fitted.npz")
+        tmdb_to_row = {t: i for i, t in enumerate(movies["tmdb_id"])}
+        universe_rows = np.array([tmdb_to_row[t] for t in f["item_tmdb"]])
+        catalog = Catalog(
+            movie_ids=movies["id"].to_numpy(), titles=movies["title"].tolist(),
+            genres=[list(g) for g in movies["genres"]], keywords=[list(k) for k in movies["keywords"]],
+            language=movies["original_language"].fillna("").tolist(),
+            runtime=movies["runtime_min"].astype(float).to_numpy(), year=movies["year"].astype(float).to_numpy(),
+            part=movies["catalog_part"].to_numpy(), popularity=movies["popularity"].astype(float).to_numpy(),
+            votes=movies["votes"].astype(float).to_numpy(), has_award=movies["has_award"].fillna(False).to_numpy(),
+            content=content, universe_rows=universe_rows, recent=(movies["catalog_part"] == "C").to_numpy())
+        train = sp.load_npz(MODELS / "train_ratings.npz").tocsr()
+        uc, ic, sv, al = _settings("user_cf"), _settings("item_cf"), _settings("svd"), _settings("als")
+        sources = SourceModels(
+            train=train, popularity=f["popularity"], content_sim=np.zeros((1, 1), dtype=np.float32),
+            item_neighbors=(f["item_nb_idx"], f["item_nb_vals"]), item_k=ic["neighbors"], item_beta=ic["beta"],
+            user_cf={"k": uc["k"], "min_overlap": uc["min_overlap"], "beta": uc["beta"]},
+            svd={"mu": float(f["svd_mu"]), "bi": f["svd_bi"], "Q": f["svd_Q"], "reg": sv["reg_all"]},
+            als={"Y": f["als_Y"], "alpha": al["alpha"], "reg": al["regularization"]})
+        weights = json.loads((MODELS / "hybrid_weights.json").read_text())
+        calibrator = joblib.load(MODELS / "calibration.joblib")
+        _engine = OnlineEngine(catalog, sources, weights, calibrator, (f["item_nb_idx"], f["item_nb_vals"]), train)
+        return _engine
+
+
+def user_state(db: Session, user_id: int, engine: OnlineEngine) -> UserState:
+    row_of = engine.cat.row_of
+    q = lambda sql: db.execute(text(sql), {"u": user_id}).all()
+    st = UserState()
+    st.ratings = {row_of[m]: float(r) for m, r in q("SELECT movie_id, rating FROM ratings WHERE user_id = :u") if m in row_of}
+    for m, v in q("SELECT movie_id, value FROM reactions WHERE user_id = :u"):
+        if m in row_of:
+            (st.likes if v > 0 else st.dislikes).add(row_of[m])
+    st.picks = {row_of[m] for (m,) in q("SELECT movie_id FROM onboarding_picks WHERE user_id = :u") if m in row_of}
+    st.in_list = {row_of[m] for (m,) in q("SELECT movie_id FROM user_movie_list WHERE user_id = :u") if m in row_of}
+    st.watched = {row_of[m] for (m,) in q("SELECT movie_id FROM watched WHERE user_id = :u") if m in row_of}
+    events = q("SELECT event_type, movie_id, created_at FROM interactions WHERE user_id = :u ORDER BY created_at")
+    st.events = [(e, row_of[m]) for e, m, _ in events if m in row_of]
+    st.behavioral_count = len({m for e, m, _ in events if e in BEHAVIORAL_EVENTS and m is not None})
+    cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+    views = [row_of[m] for e, m, t in reversed(events) if e in ("detail_view", "quick_view") and m in row_of and t >= cutoff]
+    st.recent_views = list(dict.fromkeys(views))
+    pref = db.execute(text("SELECT languages, liked_genre_ids, disliked_genre_ids FROM user_preferences WHERE user_id = :u"),
+                      {"u": user_id}).first()
+    if pref:
+        names = dict(db.execute(text("SELECT id, name FROM genres")).all())
+        st.languages = list(pref[0] or [])
+        st.liked_genres = [names[g] for g in (pref[1] or []) if g in names]
+        st.disliked_genres = [names[g] for g in (pref[2] or []) if g in names]
+    return st

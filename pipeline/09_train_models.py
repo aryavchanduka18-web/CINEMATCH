@@ -288,7 +288,7 @@ def run_als(ctx: Ctx) -> dict:
     from cinematch_engine.models.als_implicit import ImplicitALS, implicit_strength
     strength = implicit_strength(ctx.data.train)
     grid = []
-    for f, reg, alpha in itertools.product((64, 128), (0.01, 0.1, 1.0), (1.0, 5.0, 20.0, 40.0)):
+    for f, reg, alpha in itertools.product((32, 64, 128), (0.1, 0.3, 1.0), (0.1, 0.25, 0.5, 1.0, 2.0)):
         m = ImplicitALS(factors=f, regularization=reg, alpha=alpha, iterations=15).fit(strength)
         grid.append({"factors": f, "regularization": reg, "alpha": alpha, "iterations": 15,
                      "ndcg": ctx.quick_ndcg(rank_users(m.score, ctx.data, ctx.users, K, BATCH))})
@@ -316,8 +316,11 @@ def popularity_scores(ctx: Ctx, m: float) -> pd.DataFrame:
     parts B/C/D and the new-movie holdout films from TMDB vote_count / vote_average, same formula."""
     from pipeline.common import TMDB_DIR, read_json
     from cinematch_engine.models.popularity import bayesian_average
-    pop = PopularityModel(m).fit(ctx.data.train)
     counts = ctx.data.item_counts()
+    # Display score: same Bayesian formula with m = the median part-A rating count. The ranking model
+    # tunes m very high (see decisions-log), which would squash every displayed score to the mean.
+    m = float(np.median(counts[counts > 0]))
+    pop = PopularityModel(m).fit(ctx.data.train)
     a = pd.DataFrame({"tmdb_id": ctx.data.item_tmdb, "popularity_score": pop.scores, "source": "movielens_train"})
     a = a[counts > 0]
     movies = pd.read_parquet(PROCESSED / "movies_clean.parquet", columns=["tmdb_id"])
@@ -330,7 +333,7 @@ def popularity_scores(ctx: Ctx, m: float) -> pd.DataFrame:
     rest["popularity_score"] = bayesian_average(avg * votes, votes, c_tmdb, m_tmdb)
     rest["source"] = "tmdb"
     out = pd.concat([a, rest], ignore_index=True)
-    write_json(MODELS / "popularity_display.json", {"m_movielens": m, "m_tmdb": m_tmdb, "c_tmdb": c_tmdb,
+    write_json(MODELS / "popularity_display.json", {"m_movielens_display": m, "m_tmdb": m_tmdb, "c_tmdb": c_tmdb,
                                                     "films": out["source"].value_counts().to_dict()})
     return out
 

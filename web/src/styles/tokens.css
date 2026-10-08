@@ -1,0 +1,13 @@
+/* CineMatch design tokens (spec section 8.6). Accent is for Match %, active stars and focus rings only. */
+:root {
+  --cm-bg: #080808;
+  --cm-surface: #141414;
+  --cm-surface-2: #1b1b1b;
+  --cm-text: #ffffff;
+  --cm-muted: #a7a7a7;
+  --cm-accent: #c8102e;
+  --cm-accent-hover: #e0263f;
+  --cm-fast: 180ms;
+  --cm-hero: 500ms;
+  --cm-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}

@@ -1,22 +1,35 @@
 import { Route, Routes } from "react-router-dom";
-import NavBar from "./components/NavBar";
+import AppShell from "./components/layout/AppShell";
+import Activity from "./pages/Activity";
+import { AuthPage } from "./pages/Auth";
+import Discover from "./pages/Discover";
+import { Genre, Genres } from "./pages/Genres";
 import Home from "./pages/Home";
-import Placeholder from "./pages/Placeholder";
+import Lab from "./pages/Lab";
+import Movie from "./pages/Movie";
+import MyList from "./pages/MyList";
+import Onboarding from "./pages/Onboarding";
+import Search from "./pages/Search";
+import { PageMessage } from "./components/Loading";
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-[#080808] text-white">
-      <NavBar />
-      <main className="px-6 py-8">
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/discover" element={<Placeholder title="Discover" />} />
-          <Route path="/genres" element={<Placeholder title="Genres" />} />
-          <Route path="/my-list" element={<Placeholder title="My List" />} />
-          <Route path="/activity" element={<Placeholder title="Activity" />} />
-          <Route path="*" element={<Placeholder title="Not found" />} />
-        </Routes>
-      </main>
-    </div>
+    <Routes>
+      <Route element={<AppShell />}>
+        <Route path="/" element={<Home />} />
+        <Route path="/discover" element={<Discover />} />
+        <Route path="/genres" element={<Genres />} />
+        <Route path="/genres/:slug" element={<Genre />} />
+        <Route path="/movie/:id" element={<Movie />} />
+        <Route path="/my-list" element={<MyList />} />
+        <Route path="/activity" element={<Activity />} />
+        <Route path="/search" element={<Search />} />
+        <Route path="/onboarding" element={<Onboarding />} />
+        <Route path="/login" element={<AuthPage mode="login" />} />
+        <Route path="/register" element={<AuthPage mode="register" />} />
+        <Route path="/lab" element={<Lab />} />
+        <Route path="*" element={<PageMessage title="Page not found" />} />
+      </Route>
+    </Routes>
   );
 }

@@ -116,6 +116,7 @@ class SourceModels:
         if prof.train_rows is not None:                       # never use yourself as a neighbor
             sim[np.arange(len(prof)), prof.train_rows] = 0
         idx, vals = top_positive(sim, self.user_cf["k"])
+        self.last_neighbors = (idx, vals)                     # kept for explanations (neighbor votes)
         nb = neighbor_matrix(idx, vals, self.user_cf["k"], sim.shape[1])
         num, den = dense(nb @ self.cf_rc), dense(nb @ self.cf_ind)
         return (means[:, None] + num / (den + self.user_cf["beta"] + 1e-9)).astype(np.float32)
