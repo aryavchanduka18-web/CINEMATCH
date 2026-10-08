@@ -2,7 +2,9 @@ from datetime import date
 
 import pandas as pd
 
-from pipeline.selection import boost_floor, hollywood_pick, hollywood_rule, pick_part_c_threshold, pick_threshold, select
+from pipeline.catalog import backbone_ml_ids
+from pipeline.selection import (boost_floor, hollywood_pick, hollywood_rule, pick_part_c_threshold, pick_threshold,
+                                relaxed_additions, select)
 
 award_mod = __import__("importlib").import_module("pipeline.04_fetch_awards_wikidata")
 
@@ -72,3 +74,29 @@ def test_hollywood_pick_needs_us_release_and_skips_existing():
                        _d(4, 5000, 2010), _d(5, 5000, 2027, date_="2027-01-01")])
     picked = hollywood_pick(df, H, date(2026, 10, 8), exclude={4})
     assert picked["tmdb_id"].tolist() == [1]
+
+
+def test_relaxed_additions_use_frozen_settings_and_leave_the_base_alone():
+    def row(tmdb_id, part, original, ml=None, votes=0, lang=None):
+        return {"tmdb_id": tmdb_id, "part": part, "ml_rating_count": ml, "tmdb_vote_count": votes,
+                "discover_language": lang, "release_date": "2000-01-01", "status": "Released",
+                "passed": True, "original_passed": original}
+    gated = pd.DataFrame([row(i, "A", True, ml=100 + i) for i in range(10)]          # backbone
+                         + [row(50, "A", False, ml=200), row(51, "A", False, ml=60)]  # relaxed-only A
+                         + [row(60 + i, "B", True, votes=100 + i, lang="hi") for i in range(3)]
+                         + [row(70, "B", False, votes=500, lang="hi"), row(71, "B", False, votes=50, lang="hi")])
+    cfg = {"part_a": {"target": 5, "min_ratings": 50}, "part_b": {"max_per_language": 3},
+           "part_c": {"start_min_votes": 100, "target_min": 0, "target_max": 500, "pool_min_votes": 50}}
+    start, end = date(2025, 1, 1), date(2026, 1, 1)
+    base, chosen = select(gated.assign(passed=gated["original_passed"]), cfg, start, end)
+    extra = relaxed_additions(gated, base, chosen, cfg, start, end)
+    assert chosen["part_a_min_ratings"] == 105                  # 5 backbone films: 105..109
+    assert sorted(extra["tmdb_id"]) == [50, 70]                 # 51 is below the A threshold, 71 below the B cut
+    assert not set(extra["tmdb_id"]) & set(base["tmdb_id"])
+
+
+def test_backbone_excludes_films_added_by_the_relaxed_gate():
+    catalog = pd.DataFrame({"catalog_part": ["A", "A", "B"], "ml_movie_id": [1, 2, None],
+                            "relaxed_gate": [False, True, False]})
+    assert backbone_ml_ids(catalog).tolist() == [1]
+    assert backbone_ml_ids(catalog.drop(columns="relaxed_gate")).tolist() == [1, 2]   # older catalog files

@@ -4,6 +4,7 @@ import pandas as pd
 import scipy.sparse as sp
 
 from cinematch_engine.models.content import build_content_features
+from pipeline.catalog import original_gate_mask
 from pipeline.common import ARTIFACTS, PROCESSED, get_logger, write_json
 
 log = get_logger("08_features")
@@ -14,7 +15,7 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     movies = pd.read_parquet(PROCESSED / "movies_clean.parquet")
     credits = pd.read_parquet(PROCESSED / "credits_clean.parquet")
-    feats = build_content_features(movies, credits)
+    feats = build_content_features(movies, credits, fit_mask=original_gate_mask(movies))
     sp.save_npz(OUT / "content.npz", feats.matrix)
     joblib.dump(feats.vectorizer, OUT / "vectorizer.joblib")
     pd.DataFrame({"row": range(len(feats.tmdb_ids)), "tmdb_id": feats.tmdb_ids,

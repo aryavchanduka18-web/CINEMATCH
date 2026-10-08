@@ -88,3 +88,30 @@ def hollywood_pick(pool: pd.DataFrame, h: dict, window_end, exclude: set) -> pd.
     released = (pool["status"] == "Released") & (pd.to_datetime(pool["release_date"]).dt.date <= window_end)
     keep = pool["us_production"].fillna(False).astype(bool) & released & hollywood_rule(pool, h) & ~pool["tmdb_id"].isin(exclude)
     return pool[keep].drop_duplicates("tmdb_id")
+
+
+def relaxed_additions(gated: pd.DataFrame, base: pd.DataFrame, chosen: dict, cfg: dict,
+                      window_start, window_end) -> pd.DataFrame:
+    """Films that pass the relaxed gate but failed the original one, added on top of `base` (the
+    catalog cut with the original gate) with that cut's frozen settings, so nothing in `base` changes:
+    A: >= the chosen part-A rating threshold; B: at least as many votes as the least-voted film kept in
+    its language; C: released in the window with >= the chosen part-C votes; D: the Hollywood rule.
+    gated must have `passed` (relaxed gate) and `original_passed` columns."""
+    new = gated[gated["passed"] & ~gated["original_passed"] & ~gated["tmdb_id"].isin(base["tmdb_id"])]
+    a = new[(new["part"] == "A") & (new["ml_rating_count"] >= chosen["part_a_min_ratings"])]
+
+    kept_b = base[base["part"] == "B"].groupby("discover_language")["tmdb_vote_count"].min()
+    b = new[(new["part"] == "B") & ~new["tmdb_id"].isin(a["tmdb_id"])]
+    b = b[b["tmdb_vote_count"] >= b["discover_language"].map(kept_b).fillna(float("inf"))]
+
+    c = new[(new["part"] == "C") & ~new["tmdb_id"].isin(a["tmdb_id"]) & ~new["tmdb_id"].isin(b["tmdb_id"])]
+    c = c[(c["status"] == "Released")
+          & (pd.to_datetime(c["release_date"]).dt.date >= window_start)
+          & (pd.to_datetime(c["release_date"]).dt.date <= window_end)
+          & (c["tmdb_vote_count"] >= chosen["part_c_min_votes"])]
+
+    d = pd.DataFrame(columns=new.columns)
+    if "hollywood" in cfg:
+        d = hollywood_pick(new[new["part"] == "D"], cfg["hollywood"], window_end,
+                           exclude=set(base["tmdb_id"]) | set(a["tmdb_id"]) | set(b["tmdb_id"]) | set(c["tmdb_id"]))
+    return pd.concat([a, b, c, d], ignore_index=True).drop_duplicates("tmdb_id")

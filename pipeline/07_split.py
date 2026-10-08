@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
+from pipeline.catalog import backbone_ml_ids
 from pipeline.common import PROCESSED, SEED, get_logger, write_json
 from pipeline.ratings import global_cutoff, holdout_films, time_split
 
@@ -18,7 +19,7 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     ratings = pd.read_parquet(PROCESSED / "ratings.parquet")
     catalog = pd.read_csv(PROCESSED / "catalog_ids.csv")
-    part_a = catalog.loc[catalog["catalog_part"] == "A", "ml_movie_id"].dropna().astype("int32")
+    part_a = backbone_ml_ids(catalog)
 
     held = holdout_films(part_a, 0.05, SEED)
     pd.DataFrame({"ml_movie_id": held}).to_parquet(OUT / "holdout_films.parquet", index=False)

@@ -33,3 +33,20 @@ def test_rows_are_unit_length_and_similar_films_are_closer():
     sim = (m @ m.T).toarray()
     assert sim[0, 1] > sim[0, 2]
     assert set(feats.block_columns) == {"text", "genres", "language", "country", "director", "cast", "studio"}
+
+def test_adding_films_with_fit_mask_leaves_existing_rows_unchanged():
+    movies, credits = _films()
+    before = build_content_features(movies.iloc[:2], credits).matrix
+    extra = pd.DataFrame({"tmdb_id": [4], "overview": ["a brand new film about a detective"], "tagline": [None],
+                          "keywords": [[]], "genres": [["Crime"]], "original_language": ["en"],
+                          "countries": [["US"]], "studios": [["Z"]]})
+    both = pd.concat([movies.iloc[:2], extra], ignore_index=True)
+    credits = pd.concat([credits, pd.DataFrame([{"tmdb_id": 4, "name": "Dir Z", "role": "director",
+                                                 "credit_order": None}])], ignore_index=True)
+    feats = build_content_features(both, credits, fit_mask=np.array([True, True, False]))
+    cols = feats.fit_columns()
+    after = feats.matrix
+    assert abs(after[:2][:, cols] - before).max() == 0           # same values on the original columns
+    assert after[:2][:, np.setdiff1d(np.arange(after.shape[1]), cols)].nnz == 0
+    assert len(feats.block_vocab["director"]) == 2 and feats.block_vocab["director"][-1] == "Dir Z"
+    assert (after[2] @ after[0].T).toarray()[0, 0] > 0           # the new film is similar to the crime films

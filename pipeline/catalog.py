@@ -5,8 +5,18 @@ Pure functions only (no I/O), so they are unit-tested in pipeline/tests.
 import re
 from datetime import date
 
-MIN_OVERVIEW_WORDS = 15
-MIN_CAST = 3
+import numpy as np
+import pandas as pd
+
+# Metadata gate, relaxed on 2026-10-08 (Aryav) so famous films with a short TMDB overview or a short
+# cast list (The Graduate, Annie Hall, Furious 7, ...) are no longer dropped.
+MIN_OVERVIEW_WORDS = 10
+MIN_CAST = 1
+# The original gate. The catalog is still cut with it first, exactly as in the first build, so the
+# MovieLens evaluation backbone (part A ratings, splits, trained models) stays the same; films that pass
+# only the relaxed gate are added on top (pipeline/selection.py::relaxed_additions, relaxed_gate=True).
+ORIGINAL_MIN_OVERVIEW_WORDS = 15
+ORIGINAL_MIN_CAST = 3
 MAX_CAST_STORED = 15
 WRITER_JOBS = {"Screenplay", "Writer", "Story", "Novel", "Author"}
 
@@ -21,24 +31,44 @@ def directors(detail: dict) -> list[dict]:
     return [c for c in detail.get("credits", {}).get("crew", []) if c.get("job") == "Director"]
 
 
-def gate_failures(detail: dict) -> list[str]:
+def gate_failures(detail: dict, min_words: int = MIN_OVERVIEW_WORDS, min_cast: int = MIN_CAST) -> list[str]:
     """Return why a film fails the metadata gate (empty list = it passes).
 
-    Gate: poster, English overview >= 15 words, >= 1 genre, a director, >= 3 cast members.
-    A backdrop is optional. Missing data is never filled in: the film is dropped instead.
+    Gate: poster, English overview >= 10 words, >= 1 genre, a director, >= 1 cast member (the original
+    gate, ORIGINAL_*: 15 words and 3 cast). A backdrop is optional. Missing data is never filled in:
+    the film is dropped instead.
     """
     reasons = []
     if not detail.get("poster_path"):
         reasons.append("no_poster")
-    if overview_words(detail.get("overview")) < MIN_OVERVIEW_WORDS:
+    if overview_words(detail.get("overview")) < min_words:
         reasons.append("short_overview")
     if not detail.get("genres"):
         reasons.append("no_genre")
     if not directors(detail):
         reasons.append("no_director")
-    if len(detail.get("credits", {}).get("cast", [])) < MIN_CAST:
+    if len(detail.get("credits", {}).get("cast", [])) < min_cast:
         reasons.append("few_cast")
     return reasons
+
+
+def original_gate_failures(detail: dict) -> list[str]:
+    return gate_failures(detail, ORIGINAL_MIN_OVERVIEW_WORDS, ORIGINAL_MIN_CAST)
+
+
+def original_gate_mask(movies: pd.DataFrame) -> np.ndarray:
+    """True for catalog films that passed the original gate. Content vocabularies are fit on these
+    films only, so films added by the relaxed gate do not change the features the models were tuned
+    and evaluated with."""
+    if "relaxed_gate" not in movies:
+        return np.ones(len(movies), dtype=bool)
+    return ~movies["relaxed_gate"].fillna(False).astype(bool).to_numpy()
+
+
+def backbone_ml_ids(catalog: pd.DataFrame) -> pd.Series:
+    """MovieLens ids of the evaluation backbone: part A films that passed the original gate."""
+    a = catalog[(catalog["catalog_part"] == "A") & original_gate_mask(catalog)]
+    return a["ml_movie_id"].dropna().astype("int32")
 
 
 def certification(detail: dict) -> str | None:

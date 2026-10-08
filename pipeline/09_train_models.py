@@ -25,6 +25,7 @@ from cinematch_engine.models.content import BLOCKS, ContentModel, build_blocks, 
 from cinematch_engine.models.item_cf import ItemCF
 from cinematch_engine.models.popularity import PopularityModel
 from cinematch_engine.models.user_cf import UserCF
+from pipeline.catalog import original_gate_mask
 from pipeline.common import ARTIFACTS, PROCESSED, SEED, get_logger, write_json
 
 log = get_logger("09_train")
@@ -131,7 +132,7 @@ def run_content(ctx: Ctx) -> dict:
         return ctx.quick_ndcg(recs), model, recs
 
     grid = []
-    blocks = {n: build_blocks(movies, credits, ngram_max=n) for n in (1, 2)}
+    blocks = {n: build_blocks(movies, credits, ngram_max=n, fit_mask=original_gate_mask(movies)) for n in (1, 2)}
     for ngram, (name, w) in itertools.product((1, 2), WEIGHT_PRESETS.items()):
         ndcg, _, _ = evaluate(blocks[ngram], w, 1.0)
         grid.append({"ngram_max": ngram, "weights": name, "thin_text_scale": 1.0, "ndcg": ndcg})
