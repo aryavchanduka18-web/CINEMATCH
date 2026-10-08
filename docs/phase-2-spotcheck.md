@@ -35,11 +35,13 @@ Parts: A = MovieLens film, B = curated international, C = new & notable.
 Drawn with seed 42 from the new films only: 3 from part D (Hollywood enrichment) and 3 from the
 expanded Tamil, Telugu, Malayalam and Kannada set. Same check as above.
 
+**Result: checked by hand by Aryav on 2026-10-08. All 6 films match TMDB.**
+
 | # | Title | Year | Language | Part | Director | Genres | TMDB | OK? |
 |---|---|---|---|---|---|---|---|---|
-| 1 | Joseph: King of Dreams | 2000 | en | D | Rob LaDuca, Robert C. Ramirez | Family, Animation, Drama | [16366](https://www.themoviedb.org/movie/16366) | |
-| 2 | Wrong Turn 6: Last Resort | 2014 | en | D | Valeri Milev | Horror | [259072](https://www.themoviedb.org/movie/259072) | |
-| 3 | Hocus Pocus 2 | 2022 | en | D | Anne Fletcher | Fantasy, Comedy | [642885](https://www.themoviedb.org/movie/642885) | |
-| 4 | Massu Engira Maasilamani | 2015 | ta | B | Venkat Prabhu | Comedy, Thriller, Horror | [329134](https://www.themoviedb.org/movie/329134) | |
-| 5 | Oru Vadakkan Veeragatha | 1989 | ml | B | T Hariharan | Drama, Action | [151662](https://www.themoviedb.org/movie/151662) | |
-| 6 | Bhoothakaalam | 2022 | ml | B | Rahul Sadasivan | Thriller, Mystery, Horror | [881099](https://www.themoviedb.org/movie/881099) | |
+| 1 | Joseph: King of Dreams | 2000 | en | D | Rob LaDuca, Robert C. Ramirez | Family, Animation, Drama | [16366](https://www.themoviedb.org/movie/16366) | yes |
+| 2 | Wrong Turn 6: Last Resort | 2014 | en | D | Valeri Milev | Horror | [259072](https://www.themoviedb.org/movie/259072) | yes |
+| 3 | Hocus Pocus 2 | 2022 | en | D | Anne Fletcher | Fantasy, Comedy | [642885](https://www.themoviedb.org/movie/642885) | yes |
+| 4 | Massu Engira Maasilamani | 2015 | ta | B | Venkat Prabhu | Comedy, Thriller, Horror | [329134](https://www.themoviedb.org/movie/329134) | yes |
+| 5 | Oru Vadakkan Veeragatha | 1989 | ml | B | T Hariharan | Drama, Action | [151662](https://www.themoviedb.org/movie/151662) | yes |
+| 6 | Bhoothakaalam | 2022 | ml | B | Rahul Sadasivan | Thriller, Mystery, Horror | [881099](https://www.themoviedb.org/movie/881099) | yes |
