@@ -14,6 +14,7 @@ STEPS = {
     6: "06_ratings_prep",
     7: "07_split",
     8: "08_features_content",
+    9: "09_train_models",
     12: "12_load_db",
 }
 log = get_logger("run_all")
