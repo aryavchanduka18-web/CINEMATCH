@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.auth import current_user
+from app.auth import check_password, clear, current_user
 from app.db import get_db
 from cinematch_engine.profile import BEHAVIORAL_EVENTS, stage_of
 
@@ -26,8 +26,43 @@ def counts(db: Session, uid: int) -> dict:
 @router.get("/me")
 def me(user=Depends(current_user), db: Session = Depends(get_db)) -> dict:
     pref = db.execute(text("SELECT discovery_mode FROM user_preferences WHERE user_id = :u"), {"u": user["id"]}).first()
+    user.pop("token_issued_ms", None)
     return {**user, "onboarded": user["onboarded_at"] is not None,
             "discovery_mode": pref[0] if pref else "balanced", "counts": counts(db, user["id"])}
+
+
+class AccountUpdate(BaseModel):
+    display_name: str = Field(max_length=80)
+
+
+@router.patch("/me")
+def update_me(body: AccountUpdate, user=Depends(current_user), db: Session = Depends(get_db)) -> dict:
+    name = body.display_name.strip()
+    if not name:
+        raise HTTPException(422, "Your name cannot be empty")
+    db.execute(text("UPDATE users SET display_name = :n WHERE id = :u"), {"n": name, "u": user["id"]})
+    db.commit()
+    return {"display_name": name}
+
+
+class AccountDelete(BaseModel):
+    password: str | None = Field(default=None, max_length=200)
+
+
+@router.delete("/me")
+def delete_me(body: AccountDelete, response: Response, user=Depends(current_user), db: Session = Depends(get_db)) -> dict:
+    """Delete the account and everything it owns (ratings, reactions, list, history, logs cascade).
+
+    Accounts need their password; guests have none and can delete straight away."""
+    if not user["is_guest"]:
+        hashed = db.execute(text("SELECT password_hash FROM users WHERE id = :u"), {"u": user["id"]}).scalar()
+        if not check_password(body.password or "", hashed):
+            # 403, not 401: the web client answers a 401 by starting a guest session and retrying.
+            raise HTTPException(403, "That password is not right, so nothing was deleted")
+    db.execute(text("DELETE FROM users WHERE id = :u"), {"u": user["id"]})
+    db.commit()
+    clear(response)
+    return {"deleted": True}
 
 
 class Preferences(BaseModel):

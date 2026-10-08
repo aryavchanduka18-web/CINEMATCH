@@ -15,7 +15,7 @@ router = APIRouter(tags=["catalog"])
 
 @router.get("/movies/{movie_id}")
 def movie(movie_id: int, request: Request, db: Session = Depends(get_db)) -> dict:
-    uid = user_id_from(request)
+    uid = user_id_from(request, db)
     d = detail(db, movie_id, uid)
     if d is None:
         raise HTTPException(404, "Unknown movie")
@@ -56,7 +56,7 @@ def similar(movie_id: int, request: Request, db: Session = Depends(get_db)) -> d
     if row is None:
         raise HTTPException(404, "Unknown movie")
     ids = [int(engine.cat.movie_ids[r]) for r in engine.similar(row)]
-    return {"items": cards(db, ids, user_id_from(request))}
+    return {"items": cards(db, ids, user_id_from(request, db))}
 
 
 @router.get("/movies")
@@ -83,7 +83,7 @@ def discover(request: Request, genre: str | None = None, lang: str | None = None
     p.update(limit=40, offset=(max(page, 1) - 1) * 40)
     ids = [r[0] for r in db.execute(text(f"SELECT m.id FROM movies m WHERE {' AND '.join(where)} ORDER BY {order} LIMIT :limit OFFSET :offset"), p)]
     total = db.execute(text(f"SELECT count(*) FROM movies m WHERE {' AND '.join(where)}"), p).scalar()
-    return {"items": cards(db, ids, user_id_from(request)), "total": total, "page": page}
+    return {"items": cards(db, ids, user_id_from(request, db)), "total": total, "page": page}
 
 
 SEARCH_LIMIT = 60
@@ -133,7 +133,7 @@ def search(q: str, request: Request, db: Session = Depends(get_db)) -> dict:
             LIMIT :limit"""), {"q": q, "limit": SEARCH_LIMIT})
         seen = set(ids)
         ids += [r[0] for r in fuzzy if r[0] not in seen][:SEARCH_LIMIT - len(ids)]
-    return {"items": cards(db, ids, user_id_from(request))}
+    return {"items": cards(db, ids, user_id_from(request, db))}
 
 
 @router.get("/genres")
@@ -151,7 +151,7 @@ def genre_movies(slug: str, request: Request, page: int = 1, db: Session = Depen
     g = db.execute(text("SELECT id, name FROM genres WHERE slug = :s"), {"s": slug}).first()
     if g is None:
         raise HTTPException(404, "Unknown genre")
-    uid = user_id_from(request)
+    uid = user_id_from(request, db)
     if uid is None or not rec.artifacts_ready():
         return discover(request, genre=slug, page=page, db=db) | {"genre": g[1]}
     engine = rec.load_engine(db)

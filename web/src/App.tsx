@@ -1,5 +1,6 @@
 import { Route, Routes } from "react-router-dom";
 import AppShell from "./components/layout/AppShell";
+import Account from "./pages/Account";
 import Activity from "./pages/Activity";
 import { AuthPage } from "./pages/Auth";
 import Discover from "./pages/Discover";
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/login" element={<AuthPage mode="login" />} />
         <Route path="/register" element={<AuthPage mode="register" />} />
         <Route path="/lab" element={<Lab />} />
+        <Route path="/account" element={<Account />} />
         <Route path="*" element={<PageMessage title="Page not found" />} />
       </Route>
     </Routes>

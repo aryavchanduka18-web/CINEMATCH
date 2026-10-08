@@ -5,12 +5,14 @@ import MobileTabBar from "./MobileTabBar";
 import NavBar from "./NavBar";
 import { useUI } from "./ui";
 import QuickViewPanel from "../card/QuickViewPanel";
+import GuestBanner from "../account/GuestBanner";
 
 export default function AppShell() {
   const { toast } = useUI();
   return (
     <div className="min-h-screen bg-bg text-ink">
       <NavBar />
+      <GuestBanner />
       <main>
         <Outlet />
       </main>

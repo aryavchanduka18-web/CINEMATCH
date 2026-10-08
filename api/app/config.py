@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     jwt_secret: str = ""
     tmdb_api_key: str = ""
     web_origin: str = "http://localhost:5173"
+    # Hosting over HTTPS: COOKIE_SECURE=true so the session cookie is only sent over HTTPS.
+    cookie_secure: bool = False
+    cookie_samesite: str = "lax"
     app_version: str = "0.1.0"
 
 

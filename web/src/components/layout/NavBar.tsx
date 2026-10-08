@@ -107,8 +107,12 @@ function AvatarMenu() {
         >
           <MenuLink to="/activity" onClick={() => setOpen(false)}>Taste Profile</MenuLink>
           <MenuLink to="/onboarding" onClick={() => setOpen(false)}>Preferences</MenuLink>
+          <MenuLink to="/account" onClick={() => setOpen(false)}>Account</MenuLink>
           {me?.is_guest ? (
-            <MenuLink to="/register" onClick={() => setOpen(false)}>Create account</MenuLink>
+            <>
+              <MenuLink to="/register" onClick={() => setOpen(false)}>Create account</MenuLink>
+              <MenuLink to="/login" onClick={() => setOpen(false)}>Sign in</MenuLink>
+            </>
           ) : (
             <button
               className="block w-full px-4 py-2 text-left hover:bg-white/10"
