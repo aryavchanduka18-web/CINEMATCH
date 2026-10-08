@@ -99,17 +99,23 @@ Change log:
 
 **Implicit data, stated honestly in the report:** "Implicit training signals are derived from explicit ratings for offline experiments. Live CineMatch implicit feedback comes from real user interactions."
 
-### 4.2 Catalog (target about 12,000 to 15,000 films)
-| Part | How it's selected | Rough size |
+### 4.2 Catalog (product catalog; size set by the rules below, measured in the catalog audit)
+The **product catalog** is everything the website can show. The **evaluation universe** (section 12) is only the MovieLens-linked part A films in the ratings sample, so model comparisons stay fair however large the product catalog grows.
+
+| Part | How it's selected | Built (2026-10-08) |
 |---|---|---|
-| A. MovieLens films | Films with at least 50 ratings (threshold tuned so this part lands near 10,000) that pass the metadata gate | ~10,000 |
-| B. Curated international | TMDB "discover" by original language, sorted by vote count: Hindi, Tamil, Telugu, Malayalam, Kannada, Bengali, Marathi, Korean, Japanese, Spanish, French, German, Italian, Chinese and others | ~2,000–3,500 |
-| C. New & Notable | Releases from the 18 months before the catalog build date, with a minimum TMDB vote count | ~300–500 |
+| A. MovieLens backbone | Films with enough MovieLens ratings to train and evaluate user CF, item CF, SVD and ALS (threshold tuned so this part lands near 10,000; 154 ratings at the first build) that pass the metadata gate | 9,995 |
+| B. International enrichment | TMDB "discover" by original language, sorted by vote count: Hindi, Tamil, Telugu, Malayalam, Kannada, Bengali, Marathi, Korean, Japanese, Spanish, French, German, Italian, Chinese and others. Tamil, Telugu, Malayalam and Kannada use a lower vote minimum so they can reach the 150-film onboarding rule (Aryav, 2026-10-08) | ~3,000 |
+| C. Recent releases | Releases from the 18 months before the **catalog build date** (MovieLens 32M stops at 12 October 2023), with a minimum TMDB vote count | ~475 |
+| D. Hollywood enrichment | Famous US films missing from A, B and C. A film is a candidate if the US is among its TMDB production countries (co-productions count). It qualifies if TMDB votes ≥ 2,000, or ≥ 1,000 and released before 1990, or ≥ 1,000 and part of a TMDB collection (franchise). No minimum vote average: famous films count even if they are poorly rated. Thresholds live in `pipeline/catalog_config.yaml` | measured |
+
+- **Hollywood coverage is a product-catalog goal**, not a requirement that every Hollywood film has collaborative ratings. Films without MovieLens ratings (parts B, C and D) are recommended through content, popularity and live site feedback, which is how CineMatch demonstrates new-movie cold start.
+- **Catalog audit:** the pipeline writes `artifacts/metrics/catalog_audit.json` and `docs/catalog-audit.md`: size of each part, films per language, US candidates found, how many were already in A, how many were added as D, how many failed the gate and why, measured coverage of the top 500 and top 1,000 US films by TMDB votes, and the list of top-1,000 films still missing with the reason for each. Claims about coverage use only these measured numbers.
 
 - **Metadata gate** (every film): poster, English overview of at least 15 words, at least 1 genre, a director, at least 3 cast members. A backdrop is optional (fallback: blurred poster).
 - **Language rule:** onboarding only offers a language that has **at least 150 films** in the catalog.
 - **Thin-text rule:** films with short overviews or no keywords get more weight on structured features (genre, director, cast, language) in the content model.
-- Parts B and C have no MovieLens ratings. Only content, popularity (TMDB vote counts) and live site feedback can recommend them. This is the new-movie cold-start story.
+- Parts B, C and D have no MovieLens ratings. Only content, popularity (TMDB vote counts) and live site feedback can recommend them. This is the new-movie cold-start story.
 
 ### 4.3 One threshold table (used everywhere)
 | Use | Rule |
@@ -430,7 +436,7 @@ movies (
   tagline         text,
   studios         text[],
   logo_path       text,                    -- TMDB title logo, if any
-  catalog_part    char(1),                 -- 'A' MovieLens, 'B' curated international, 'C' new & notable
+  catalog_part    char(1),                 -- 'A' MovieLens, 'B' international, 'C' recent releases, 'D' Hollywood enrichment
   -- aggregates (from MovieLens, scaled to 1-10, refreshed by pipeline)
   ml_rating_count int default 0,
   ml_rating_mean  numeric(4,2),
@@ -632,6 +638,7 @@ A plain, professional page for the professor. It exposes the engine; it is not a
 - **Diversity:** NDCG@10 against diversity, with the three modes marked.
 - **Hybrid weights:** the tuned weights per user stage.
 - **User Inspector:** pick a site user or a sample MovieLens user and see their stage, onboarding count, behavioral interaction count, and for each recommended film the per-source scores, final score, Match % and the reasons shown on the site.
+- **Catalog audit:** catalog composition per part, films per language, and measured Hollywood coverage (top 500 and top 1,000 US films), read from `artifacts/metrics/catalog_audit.json`.
 - **Advanced panels:** shilling results, taste map, NCF row (when built).
 - Charts follow one consistent style; numbers come only from `artifacts/`.
 
