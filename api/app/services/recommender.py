@@ -14,6 +14,7 @@ import joblib
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
+from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -21,15 +22,23 @@ from cinematch_engine.online import Catalog, OnlineEngine, UserState
 from cinematch_engine.profile import BEHAVIORAL_EVENTS
 from cinematch_engine.sources import SourceModels
 
+from app.services import artifact_store
+
 ROOT = Path(__file__).resolve().parents[3]
 MODELS = ROOT / "artifacts" / "models"
 _lock = threading.Lock()
 _engine: OnlineEngine | None = None
 
 
+REQUIRED = ("fitted.npz", "content_matrix.npz", "content_rows.parquet", "hybrid_weights.json", "calibration.joblib",
+            "train_ratings.npz")
+
+
 def artifacts_ready() -> bool:
-    return all((MODELS / f).exists() for f in ("fitted.npz", "content_matrix.npz", "content_rows.parquet",
-                                              "hybrid_weights.json", "calibration.joblib", "train_ratings.npz"))
+    if all((MODELS / f).exists() for f in REQUIRED):
+        return True
+    artifact_store.try_sync()      # hosted copy: the bundle may have been uploaded after start-up
+    return all((MODELS / f).exists() for f in REQUIRED)
 
 
 def _settings(name: str) -> dict:
@@ -56,6 +65,8 @@ def load_engine(db: Session) -> OnlineEngine:
             GROUP BY m.id
         """)).mappings().all())
         movies = rows.merge(movies, on="tmdb_id", how="inner").sort_values("row")
+        if movies.empty:   # a hosted database before the catalog is restored: do not cache an empty engine
+            raise HTTPException(503, "The film catalog is not loaded yet")
         content = content[movies["row"].to_numpy()]
         f = np.load(MODELS / "fitted.npz")
         tmdb_to_row = {t: i for i, t in enumerate(movies["tmdb_id"])}

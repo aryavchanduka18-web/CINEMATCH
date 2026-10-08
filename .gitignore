@@ -20,3 +20,6 @@ artifacts/*
 
 # Code graph (graphify)
 graphify-out/
+
+# Deploy exports (catalog dump, demo account, model bundle): never commit
+deploy-out/
