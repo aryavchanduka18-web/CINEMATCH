@@ -6,7 +6,7 @@ Generated from `artifacts/metrics/validation_hybrid.json`. Validation split, sim
 
 | Stage | Popularity | Content | Item CF | User CF | SVD | ALS | NDCG@10 |
 |---|---|---|---|---|---|---|---|
-| cold | 0.5 | 0.3 | 0.0 | 0.0 | 0.0 | 0.2 | 0.0640 |
+| cold | 0.4 | 0.2 | 0.0 | 0.2 | 0.0 | 0.2 | 0.0643 |
 | warming | 0.1 | 0.3 | 0.0 | 0.4 | 0.0 | 0.2 | 0.0721 |
 | established | 0.0 | 0.1 | 0.1 | 0.1 | 0.0 | 0.7 | 0.1204 |
 
@@ -14,9 +14,9 @@ Generated from `artifacts/metrics/validation_hybrid.json`. Validation split, sim
 
 | Stage | Pairs | Share rated 7+ | ECE | Match % range |
 |---|---|---|---|---|
-| cold | 14,257 | 77.2% | 0.0132 | 70-92% |
-| warming | 16,720 | 77.8% | 0.0122 | 72-93% |
-| established | 20,880 | 80.2% | 0.0259 | 75-88% |
+| cold | 13,727 | 78.2% | 0.0078 | 72-93% |
+| warming | 16,669 | 77.9% | 0.0120 | 72-93% |
+| established | 20,876 | 80.2% | 0.0252 | 75-88% |
 
 ## Discovery Modes (established users)
 

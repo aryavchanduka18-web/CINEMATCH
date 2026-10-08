@@ -147,9 +147,19 @@ class OnlineEngine:
         return np.array(sorted(rows), dtype=np.int64)
 
     # ------------------------------------------------------------------ top picks (pool, blend, Match %, MMR)
+    def onboarding_constraint(self, st: UserState) -> np.ndarray:
+        """Cold users: the genres chosen in onboarding feed the constraints (spec 6.1). Films outside
+        those genres are left out of Top Picks, unless fewer than 200 films would remain (relaxed)."""
+        if st.stage != "cold" or not st.liked_genres:
+            return np.array([], dtype=np.int64)
+        liked = set(st.liked_genres)
+        outside = np.array([r for r in range(self.cat.n) if not liked & set(self.cat.genres[r])], dtype=np.int64)
+        return outside if self.cat.n - len(outside) >= 200 else np.array([], dtype=np.int64)
+
     def top_picks(self, st: UserState, mode: str = "balanced", k: int = 20, extra_exclude=(), scores=None):
         scores = scores or self.scores(st)
         excl = np.union1d(self.excluded(st), np.asarray(list(extra_exclude), dtype=np.int64))
+        excl = np.union1d(excl, self.onboarding_constraint(st))
         pool, norm = candidate_pool({s: v[None, :] for s, v in scores.items()}, [excl])
         valid = pool[0] >= 0
         pool, norm = pool[0][valid], norm[:, 0, valid]

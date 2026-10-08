@@ -1,0 +1,137 @@
+# CineMatch: an explainable hybrid movie recommender
+
+*Recommender Systems mini project. Every number in this report is read from a file in `artifacts/`
+produced by the pipeline; the detailed tables are in `docs/phase-3-results.md` to `docs/phase-6-results.md`.*
+
+## Abstract
+CineMatch is an explainable hybrid movie recommendation engine that combines content-based filtering,
+collaborative filtering, matrix factorization, implicit and explicit feedback, cold-start adaptation and
+diversity-aware reranking to give personalized, user-controllable movie discovery. On a time-split test
+of 5,000 MovieLens users with full ranking over 9,495 films, the hybrid reaches NDCG@10 = 0.163
+[0.157, 0.168], comparable to the strongest single model (implicit ALS, 0.157 [0.152, 0.162]) and well
+above item CF (0.123), user CF (0.118) and popularity (0.083). Beyond accuracy, it serves brand-new users
+(onboarding lifts cold-start NDCG@10 from 0.085 to 0.093 at zero ratings), recommends films nobody has
+rated (content hit rate@50 = 4.8% versus 0.5% at random and 0% for every collaborative model), explains
+every recommendation from the sources that really produced it, and lets the user trade accuracy for
+variety (Discovery Mode).
+
+## 1. Problem and claim
+Recommenders face six practical problems: new users (no history), new films (no ratings), popularity
+bias, repetitive lists, unexplained recommendations and no user control. Our claim is deliberately
+modest: the hybrid gives a **better overall trade-off** between relevance, cold-start performance,
+coverage, diversity and novelty than any single model. We do not claim it wins every metric.
+
+## 2. Data
+- **MovieLens 32M** (ratings until October 2023): collaborative signals and evaluation.
+- **TMDB**: metadata, images, credits, keywords, certifications; recent releases.
+- **Wikidata**: awards (15,634 award rows in the catalog).
+- **Product catalog: 13,987 films** in four parts: A MovieLens backbone 9,995 (films with >= 154
+  ratings that pass the metadata gate), B international enrichment 3,302 (18 languages; Tamil, Telugu
+  and Malayalam reach the 150-film onboarding rule), C recent releases 474 (last 18 months before the
+  build date), D Hollywood enrichment 216 (famous US productions missing from A-C). The catalog audit
+  measures 99.6% coverage of the 500 and 99.5% of the 1,000 most-voted US films.
+- **Metadata gate:** poster, English overview of 15+ words, genre, director, 3+ cast. Films that fail
+  are dropped, never filled in.
+- **Ratings sample:** 30,000 users with 20+ ratings on part-A films (4.6 million ratings), scaled to
+  1-10. Per-user time split 70/10/20, a global time cutoff (2018-08-14) as a robustness check, and
+  500 part-A films held out completely for the new-movie experiment.
+
+## 3. Methods
+| Model | Idea | Role |
+|---|---|---|
+| Popularity | Bayesian average (m tuned) | baseline, cold start, "Most Loved" |
+| Content-based | TF-IDF of overview/keywords/tagline + genre, language, country, director, cast, studio blocks; cosine to a liked-minus-disliked profile | new films, international films, explanations |
+| User CF | Pearson on co-rated films, significance weighting min(n,50)/50, top-k neighbors computed in batches | "People With Your Taste" |
+| Item CF | adjusted cosine with shrinkage n/(n+lambda), top-50 neighbors | "Because You Liked X" |
+| Funk SVD | biased matrix factorization by SGD (scikit-surprise), closed-form fold-in | "Based On Your Ratings", best RMSE |
+| Implicit ALS | weighted ALS (Hu, Koren, Volinsky 2008), confidence 1 + alpha w, closed-form fold-in | implicit feedback |
+| Hybrid | candidates (50 per source) -> percentile normalization -> stage-weighted blend -> logistic Match % -> MMR rerank -> explanations | everything personal |
+
+- **Switching + weighted + cascade hybrid.** The user stage comes from the behavioral count b only
+  (cold 0-2, warming 3-10, established 11+); onboarding picks never count. Stage weights were tuned
+  by grid search on simulated users that match the live definition. Result: cold = popularity 0.4,
+  content 0.2, user CF 0.2, ALS 0.2; warming = user CF 0.4, content 0.3, ALS 0.2, popularity 0.1;
+  established = ALS 0.7 with 0.1 each for content, item CF and user CF.
+- **Knowledge-based recommendation:** For Tonight maps mood, runtime, language and genres to hard
+  filters through a rule table (`moods.yaml`), ranks the survivors with the hybrid, and relaxes the
+  constraints in a fixed order, telling the user what was relaxed.
+- **Explanations:** at most 3 reasons, each from a source that gave at least 20% of the final score,
+  with real evidence (the liked film, the real count of similar users).
+
+## 4. Evaluation protocol
+Full ranking over every part-A film the user has not rated (no sampled negatives; Krichene and Rendle
+2020), a fixed sample of 5,000 users with at least one relevant film (rating >= 7), 95% bootstrap
+confidence intervals over users, all settings tuned on validation and the test split used once.
+
+## 5. Results
+### 5.1 Model comparison (test)
+| Model | NDCG@10 [95% CI] | P@10 | Coverage | Long-tail share |
+|---|---|---|---|---|
+| Hybrid, Familiar | 0.163 [0.157, 0.168] | 0.130 | 12.2% | 0.1% |
+| Hybrid, Balanced | 0.161 [0.155, 0.166] | 0.128 | 12.3% | 0.1% |
+| Hybrid, Discover | 0.158 [0.152, 0.163] | 0.126 | 12.9% | 0.2% |
+| Implicit ALS | 0.157 [0.152, 0.162] | 0.127 | 12.5% | 0.1% |
+| Item CF | 0.123 [0.118, 0.127] | 0.098 | 12.0% | 0.2% |
+| User CF | 0.118 [0.113, 0.123] | 0.094 | 5.9% | 0.0% |
+| Popularity | 0.083 [0.078, 0.087] | 0.069 | 1.3% | 0.0% |
+| Content-based | 0.032 [0.029, 0.034] | 0.025 | 45.7% | 53.2% |
+| Funk SVD | 0.032 [0.029, 0.034] | 0.026 | 39.8% | 49.0% |
+
+Funk SVD has the best rating accuracy (RMSE 1.653 versus 1.721 for the bias baseline on the 1-10 scale)
+but ranks poorly: it is trained to predict rating values, not to rank the whole catalog. The global
+time-cutoff check (1,184 users) gives the same order (hybrid 0.219, ALS 0.213, item CF 0.164).
+
+**Honest reading.** The hybrid and ALS intervals overlap, so on accuracy alone they are comparable.
+The hybrid's advantage is everything else below.
+
+### 5.2 Cold start (NDCG@10 against known ratings k)
+| k | Hybrid without onboarding | Hybrid with onboarding | Popularity | ALS with onboarding | Item CF without |
+|---|---|---|---|---|---|
+| 0 | 0.085 | 0.093 | 0.083 | 0.082 | 0.008 |
+| 2 | 0.093 | 0.095 | 0.083 | 0.084 | 0.031 |
+| 5 | 0.096 | 0.104 | 0.083 | 0.087 | 0.057 |
+| 10 | 0.103 | 0.110 | 0.083 | 0.096 | 0.071 |
+| 20 | 0.115 | 0.123 | 0.083 | 0.117 | 0.097 |
+Onboarding (5 picked films) helps most when nothing else is known; as real ratings accumulate the
+collaborative sources take over (`docs/phase-6-results.md`, section 2, has every k and model).
+
+### 5.3 New movies
+Held-out films with no training ratings: hit rate@50 = 4.8% for the content model, 1.0% for the
+hybrid, 0% for popularity, item CF, user CF, SVD and ALS, against 0.5% at random. This is the
+new-item cold-start problem in numbers, and the reason the hybrid keeps a content source and the
+site has a New & Notable rail.
+
+### 5.4 Diversity
+MMR lambda from 0.5 to 1.0 trades NDCG@10 for intra-list diversity. The Discovery Modes sit on that
+curve: Familiar 0.163 / 0.835, Balanced 0.162 / 0.844, Discover 0.159 / 0.855 (NDCG / diversity).
+
+### 5.5 Calibration
+Match % is a logistic calibration of the blend score per stage, fitted on validation. On test the
+expected calibration error is 0.013 (cold), 0.015 (warming) and 0.028 (established), all under the
+0.05 pass threshold, with Match % values mostly between 70% and 93%.
+
+## 6. The website
+React + TypeScript front end and a FastAPI back end over PostgreSQL. Every visitor is a user (guest
+accounts upgrade on registration). The home page is planned in one call: hero (top 5 picks), up to 13
+rails, de-duplicated, short rails hidden. Every action writes both the current-state tables and an
+append-only interactions log; every shown card is logged in `recommendation_logs`. The 12 scenario
+tests of the spec (cold users stay cold after onboarding, 3 ratings make a user warming, dislikes
+disappear, no duplicates, every reason has at least 20% of the score, ...) all pass on the live catalog.
+
+## 7. Advanced modules (lab only)
+See `artifacts/lab/shilling.json`, `taste_map.json`, `ncf.json` and the Research Lab page.
+
+## 8. Limitations
+- MovieLens ratings stop in October 2023; parts B, C and D rely on content and popularity until site
+  users rate them.
+- Offline implicit feedback is derived from ratings (7+); live implicit feedback comes from real events.
+- Several tuned settings sit at the edge of wide grids (popularity m, item CF shrinkage): validation
+  rewards popular, well-supported recommendations, a known popularity bias of the evaluation itself.
+- Kannada has 127 films, below the 150-film onboarding rule, even at the lowest vote floor.
+
+## References
+Hu, Koren and Volinsky (2008), Collaborative filtering for implicit feedback datasets. Koren (2008),
+Factorization meets the neighborhood. Krichene and Rendle (2020), On sampled metrics for item
+recommendation. Rendle et al. (2020), Neural collaborative filtering vs. matrix factorization revisited.
+He et al. (2017), Neural collaborative filtering. Carbonell and Goldstein (1998), MMR. Harper and
+Konstan (2015), The MovieLens datasets.
