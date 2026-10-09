@@ -1,21 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../api/client";
-import type { RecItem } from "../api/types";
-import MovieGrid from "../components/card/MovieGrid";
+import PagedGrid from "../components/card/PagedGrid";
 import SurpriseMeButton from "../components/discovery/SurpriseMeButton";
 import TonightPanel from "../components/discovery/TonightPanel";
 import { LANGUAGES } from "../lib/format";
 
-type Page = { items: RecItem[]; total: number; page: number };
-
 export default function Discover() {
   const [f, setF] = useState({ genre: "", lang: "", decade: "", runtime: "", min_rating: "", sort: "popular" });
-  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState<number | null>(null);
   const genres = useQuery({ queryKey: ["genres"], queryFn: () => api<{ genres: { slug: string; name: string }[] }>("/genres") });
-  const qs = new URLSearchParams(Object.entries({ ...f, page: String(page) }).filter(([, v]) => v) as [string, string][]);
-  const res = useQuery({ queryKey: ["discover", qs.toString()], queryFn: () => api<Page>(`/movies?${qs}`) });
-  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLSelectElement>) => { setF({ ...f, [k]: e.target.value }); setPage(1); };
+  const qs = new URLSearchParams(Object.entries(f).filter(([, v]) => v) as [string, string][]);
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
   const sel = "rounded-md border border-white/15 bg-surface-2 px-3 py-2 text-sm";
   return (
     <div className="mx-auto max-w-[1800px] px-4 pt-24 md:px-10">
@@ -47,13 +43,11 @@ export default function Discover() {
           <option value="popular">Most popular</option><option value="rating">Highest rated</option><option value="newest">Newest</option><option value="title">Title</option>
         </select>
       </div>
-      <p className="mt-4 text-sm text-muted">{res.data ? `${res.data.total.toLocaleString()} films` : "Loading…"}</p>
-      <div className="mt-6">{res.data && <MovieGrid items={res.data.items} source="discover" personal={false} />}</div>
-      {res.data && res.data.total > page * 40 && (
-        <div className="flex justify-center pb-10">
-          <button onClick={() => setPage(page + 1)} className="rounded-md border border-white/20 px-5 py-2 text-sm hover:border-white/50">More films</button>
-        </div>
-      )}
+      <p className="mt-4 text-sm text-muted">{total != null ? `${total.toLocaleString()} films` : "Loading…"}</p>
+      <div className="mt-6">
+        <PagedGrid queryKey={["discover", qs.toString()]} path={(p) => `/movies?${qs}${qs.toString() ? "&" : ""}page=${p}`}
+          source="discover" personal={false} onTotal={setTotal} />
+      </div>
     </div>
   );
 }

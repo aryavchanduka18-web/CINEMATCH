@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import type { RecItem } from "../api/types";
-import MovieGrid from "../components/card/MovieGrid";
+import PagedGrid from "../components/card/PagedGrid";
 import { tmdbImage } from "../lib/tmdb";
 
 export function Genres() {
@@ -28,12 +28,16 @@ export function Genres() {
 
 export function Genre() {
   const slug = useParams().slug!;
-  const q = useQuery({ queryKey: ["genre", slug], queryFn: () => api<{ genre: string; items: RecItem[]; total: number }>(`/genres/${slug}/movies`) });
+  const [total, setTotal] = useState<number | null>(null);
+  const name = useQuery({ queryKey: ["genres"], queryFn: () => api<{ genres: { name: string; slug: string }[] }>("/genres") })
+    .data?.genres.find((x) => x.slug === slug)?.name;
   return (
     <div className="mx-auto max-w-[1800px] px-4 pt-24 md:px-10">
-      <h1 className="font-display text-3xl font-extrabold">{q.data?.genre ?? ""}</h1>
-      <p className="mt-1 text-sm text-muted">Ranked for you.</p>
-      <div className="mt-6">{q.data && <MovieGrid items={q.data.items} source={`genre:${slug}`} />}</div>
+      <h1 className="font-display text-3xl font-extrabold">{name ?? ""}</h1>
+      <p className="mt-1 text-sm text-muted">{total != null ? `${total.toLocaleString()} films, ` : ""}ranked for you by the recommender.</p>
+      <div className="mt-6">
+        <PagedGrid queryKey={["genre", slug]} path={(p) => `/genres/${slug}/movies?page=${p}`} source={`genre:${slug}`} onTotal={setTotal} />
+      </div>
     </div>
   );
 }

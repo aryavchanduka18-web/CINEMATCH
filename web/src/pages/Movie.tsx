@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
+import { ApiError } from "../api/client";
 import { useFeedback, useFranchise, useLogEvent, useMovie, useSimilar } from "../api/hooks";
 import WhyThis from "../components/explain/WhyThis";
 import ActionButtons from "../components/feedback/ActionButtons";
@@ -24,7 +25,14 @@ export default function Movie() {
   }, [id]);
 
   if (movie.isLoading) return <div className="h-[70vh] animate-pulse bg-surface" />;
-  if (movie.isError || !movie.data) return <PageMessage title="Film not found" />;
+  if (movie.isError && movie.error instanceof ApiError && movie.error.status === 404) return <PageMessage title="Film not found" />;
+  if (movie.isError || !movie.data)
+    return (
+      <PageMessage title="This film could not be loaded">
+        Something went wrong on our side.{" "}
+        <button onClick={() => movie.refetch()} className="text-white underline underline-offset-4">Try again</button>
+      </PageMessage>
+    );
   const m = movie.data;
   const tint = m.dominant_color ?? "#141414";
   const facts: [string, string | null | undefined][] = [
