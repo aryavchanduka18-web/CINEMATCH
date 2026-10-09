@@ -30,7 +30,7 @@ const Icon = {
 
 export default function ActionButtons({ movieId, state, source, size = "sm", showWatched = false }: Props) {
   const fb = useFeedback(movieId, source);
-  const { notify } = useUI();
+  const { notify, askDislikeReason } = useUI();
   const cls = `grid place-items-center rounded-full border transition-colors duration-150 ${
     size === "sm" ? "h-8 w-8 text-sm" : "h-11 w-11 text-base"
   }`;
@@ -66,7 +66,7 @@ export default function ActionButtons({ movieId, state, source, size = "sm", sho
         title="Not for me"
         onClick={() => {
           fb.mutate({ kind: "react", value: state.reaction === -1 ? 0 : -1 });
-          if (state.reaction !== -1) notify("Got it. We won't show this again.");
+          if (state.reaction !== -1) askDislikeReason(movieId);
         }}
       >
         {Icon.dislike(state.reaction === -1)}

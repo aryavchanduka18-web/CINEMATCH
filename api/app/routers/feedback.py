@@ -122,3 +122,60 @@ def event(body: EventBody, user=Depends(current_user), db: Session = Depends(get
     ev.log(db, user["id"], body.movie_id, body.event_type, None, body.source, body.position)
     db.commit()
     return {"ok": True}
+
+DISLIKE_REASONS = {"genre", "long", "language", "seen", "similar", "none"}
+
+
+class DislikeReasonBody(BaseModel):
+    movie_id: int
+    reason: str
+
+
+@router.post("/feedback/dislike-reason")
+def dislike_reason(body: DislikeReasonBody, user=Depends(current_user), db: Session = Depends(get_db)) -> dict:
+    """Why a disliked film was not for you. Logged as an event, and each reason changes something real:
+    genre -> its main genre goes to your disliked genres (unless you said you like it); long -> the Length
+    slider moves 20 towards shorter; language -> the International slider moves 20 towards your languages
+    if the film is outside them, else away; seen -> marked watched (never recommended again);
+    similar -> the Adventurous slider moves 15 up; none -> just the dislike."""
+    if body.reason not in DISLIKE_REASONS:
+        raise HTTPException(422, f"reason must be one of {sorted(DISLIKE_REASONS)}")
+    exists(db, body.movie_id)
+    uid = user["id"]
+    ev.log(db, uid, body.movie_id, "dislike_reason", None, body.reason)
+    db.execute(text("INSERT INTO user_preferences (user_id) VALUES (:u) ON CONFLICT (user_id) DO NOTHING"), {"u": uid})
+    pref = db.execute(text("SELECT liked_genre_ids, disliked_genre_ids, tuning FROM user_preferences WHERE user_id = :u"),
+                      {"u": uid}).mappings().one()
+    tuning = {"adventurous": 50, "hidden": 50, "international": 50, "length": 50, **(pref["tuning"] or {})}
+    change = "Thanks, noted."
+
+    def nudge(key: str, by: int, said: str):
+        nonlocal change
+        tuning[key] = max(0, min(100, int(tuning[key]) + by))
+        db.execute(text("UPDATE user_preferences SET tuning = CAST(:t AS jsonb), updated_at = now() WHERE user_id = :u"),
+                   {"u": uid, "t": __import__("json").dumps(tuning)})
+        change = said
+
+    if body.reason == "genre":
+        g = db.execute(text("""SELECT g.id, g.name FROM movie_genres mg JOIN genres g ON g.id = mg.genre_id
+            WHERE mg.movie_id = :m ORDER BY g.id LIMIT 1"""), {"m": body.movie_id}).first()
+        if g and g[0] not in (pref["liked_genre_ids"] or []):
+            db.execute(text("""UPDATE user_preferences SET disliked_genre_ids =
+                ARRAY(SELECT DISTINCT unnest(coalesce(disliked_genre_ids, '{}') || ARRAY[CAST(:g AS int)])) WHERE user_id = :u"""),
+                       {"g": g[0], "u": uid})
+            change = f"Got it: less {g[1]} from now on."
+    elif body.reason == "long":
+        nudge("length", -20, "Got it: shorter films will rank a little higher.")
+    elif body.reason == "language":
+        local = db.execute(text("SELECT original_language FROM movies WHERE id = :m"), {"m": body.movie_id}).scalar()
+        outside = local not in {"en", "hi", "ta", "te", "ml", "kn", "bn", "mr"}
+        nudge("international", -20 if outside else 20,
+              "Got it: films in your usual languages will rank a little higher." if outside
+              else "Got it: we'll mix in more international films.")
+    elif body.reason == "seen":
+        ev.mark_watched(db, uid, body.movie_id, "dislike_reason")
+        change = "Got it: marked as watched, so it won't be recommended again."
+    elif body.reason == "similar":
+        nudge("adventurous", 15, "Got it: your lists will be a little more varied.")
+    db.commit()
+    return {"ok": True, "message": change, "tuning": tuning}

@@ -24,9 +24,10 @@ export type RecItem = {
   match_pct: number | null;
   reasons: Reason[];
   user_state: UserState;
+  agreement?: number | null;
 };
 
-export type Rail = { key: string; title: string; source: string; items: RecItem[] };
+export type Rail = { key: string; title: string; subtitle?: string | null; source: string; items: RecItem[] };
 
 export type HomePayload = { stage: string; mode: Mode; hero: RecItem[]; rails: Rail[]; page_id: string };
 

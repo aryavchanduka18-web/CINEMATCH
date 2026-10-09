@@ -86,3 +86,29 @@ def confidence(engine, st, row: int, match_pct: int | None, scores: dict | None 
                        "weight": round(float(weights.get(s, 0)), 3), "counted": s in counted}
                       for s, p in sorted(pct.items(), key=lambda kv: -weights.get(kv[0], 0))],
     }
+
+
+def agreement_all(engine, st, scores: dict) -> np.ndarray:
+    """Agreement for every catalog film at once (NaN where fewer than two weighted sources score it), the
+    same formula as confidence(), for the labels on cards."""
+    weights = engine.weights[st.stage]
+    cols = []
+    for s, v in scores.items():
+        if weights.get(s, 0) <= 0:
+            continue
+        ok = np.isfinite(v)
+        if ok.sum() < 2:
+            continue
+        pct = np.full(len(v), np.nan)
+        vals = v[ok]
+        # rank = number of strictly smaller scores, as in percentiles() (ties share the lower rank)
+        pct[ok] = (np.searchsorted(np.sort(vals), vals, side="left") + 1) / ok.sum()
+        cols.append(pct)
+    if len(cols) < 2:
+        return np.full(engine.cat.n, np.nan)
+    m = np.vstack(cols)
+    n = np.isfinite(m).sum(axis=0)
+    with np.errstate(invalid="ignore"):
+        agree = np.round(100 * np.clip(1 - 2 * np.nanstd(m, axis=0), 0, 1))
+    agree[n < 2] = np.nan
+    return agree

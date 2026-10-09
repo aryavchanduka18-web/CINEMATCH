@@ -51,3 +51,14 @@ def test_models_with_zero_weight_are_listed_but_not_counted():
 
 def test_labels():
     assert [label(x) for x in (None, 90, 75, 74, 50, 49)] == [None, "High", "High", "Moderate", "Moderate", "Low"]
+
+
+def test_agreement_for_all_films_matches_the_single_film_formula():
+    from app.services.confidence import agreement_all
+    rng = np.random.default_rng(0)
+    scores = {"svd": rng.normal(size=50), "content": rng.normal(size=50), "als": rng.normal(size=50)}
+    scores["als"][3] = INF
+    eng = SimpleNamespace(weights={"warm": {"svd": .4, "content": .4, "als": .2}}, cat=SimpleNamespace(n=50))
+    allv = agreement_all(eng, SimpleNamespace(stage="warm"), scores)
+    for row in (0, 3, 17):
+        assert allv[row] == confidence(eng, SimpleNamespace(stage="warm"), row, None, scores)["agreement"]

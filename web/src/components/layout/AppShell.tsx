@@ -6,6 +6,8 @@ import NavBar from "./NavBar";
 import { useUI } from "./ui";
 import QuickViewPanel from "../card/QuickViewPanel";
 import GuestBanner from "../account/GuestBanner";
+import WhyPanel from "../explain/WhyPanel";
+import DislikeReasonSheet from "../feedback/DislikeReasonSheet";
 
 export default function AppShell() {
   const { toast } = useUI();
@@ -19,6 +21,8 @@ export default function AppShell() {
       <Footer />
       <MobileTabBar />
       <QuickViewPanel />
+      <WhyPanel />
+      <DislikeReasonSheet />
       <AnimatePresence>
         {toast && (
           <motion.div

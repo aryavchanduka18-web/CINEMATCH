@@ -96,10 +96,54 @@ def discover(request: Request, genre: str | None = None, lang: str | None = None
         where.append("m.popularity_score >= :mr"); p["mr"] = min_rating
     order = {"popular": "m.tmdb_vote_count DESC NULLS LAST", "rating": "m.popularity_score DESC NULLS LAST",
              "newest": "m.release_date DESC NULLS LAST", "title": "m.title"}.get(sort, "m.tmdb_vote_count DESC NULLS LAST")
+    uid = user_id_from(request, db)
+    if sort in PERSONAL_SORTS and uid is not None and rec.artifacts_ready():
+        all_ids = [r[0] for r in db.execute(text(f"SELECT m.id FROM movies m WHERE {' AND '.join(where)} ORDER BY {order}"), p)]
+        ranked, scores, engine, stage = personal_order(db, uid, all_ids, sort)
+        start = (max(page, 1) - 1) * 40
+        shown = ranked[start:start + 40]
+        extra = {i: {"score": scores[i], "match_pct": engine.match(stage, scores[i])} for i in shown if i in scores}
+        return {"items": cards(db, shown, uid, extra), "total": len(all_ids), "page": page, "sort": sort}
     p.update(limit=40, offset=(max(page, 1) - 1) * 40)
     ids = [r[0] for r in db.execute(text(f"SELECT m.id FROM movies m WHERE {' AND '.join(where)} ORDER BY {order} LIMIT :limit OFFSET :offset"), p)]
     total = db.execute(text(f"SELECT count(*) FROM movies m WHERE {' AND '.join(where)}"), p).scalar()
-    return {"items": cards(db, ids, user_id_from(request, db)), "total": total, "page": page}
+    return {"items": cards(db, ids, uid), "total": total, "page": page, "sort": sort}
+
+
+PERSONAL_SORTS = {"recommended", "match", "hidden", "novel"}
+
+
+def personal_order(db: Session, uid: int, ids: list[int], sort: str):
+    """Discover sorts that need the engine (the filtered films, best first):
+    recommended: hybrid percentile, re-ranked with the user's Tune sliders (novelty and the slider boosts);
+    match: hybrid score only; hidden: hybrid percentile x (1 - fame percentile), i.e. high match, little known;
+    novel: films whose genres the user has not liked before come first, then by hybrid score.
+    Films the engine excludes (rated, disliked) go last, in the filter's popularity order."""
+    engine = rec.load_engine(db)
+    st = rec.user_state(db, uid, engine)
+    rail = engine.rail_scores(st)
+    rows = np.array([engine.cat.row_of.get(i, -1) for i in ids])
+    known = rows >= 0
+    r = np.where(known, rows, 0)
+    s = np.where(known, rail[r], -np.inf)
+    ok = np.isfinite(s)
+    pct = np.zeros(len(ids))
+    if ok.any():
+        pct[ok] = (np.argsort(np.argsort(s[ok])) + 1) / ok.sum()
+    if sort == "match":
+        key = pct
+    elif sort == "recommended":
+        tuning = rec.user_tuning(db, uid)
+        key = pct + (0.05 + 0.15 * tuning.shift("hidden")) * engine.cat.novelty[r] + engine._tuning_boost(r, tuning)
+    elif sort == "hidden":
+        key = pct * (1 - engine.cat.fame_pct[r] / 100)
+    else:
+        liked = {g for row in st.liked_rows() for g in engine.cat.genres[row]}
+        fresh = np.array([0.0 if set(engine.cat.genres[x]) & liked else 1.0 for x in r])
+        key = fresh + pct
+    key = np.where(ok, key, -np.inf)
+    order = np.argsort(-key, kind="stable")
+    return [ids[j] for j in order], {ids[j]: float(s[j]) for j in np.nonzero(ok)[0]}, engine, st.stage
 
 
 SEARCH_LIMIT = 60

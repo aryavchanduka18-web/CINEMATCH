@@ -117,3 +117,26 @@ def taste_profile(user=Depends(current_user), db: Session = Depends(get_db)) -> 
             "like_dislike_ratio": round(c["likes"] / c["dislikes"], 2) if c["dislikes"] else None,
             "films_rated": c["ratings"], "films_saved": c["list"], "discovery_mode": mode or "balanced",
             "stage": c["stage"], "behavioral_count": c["behavioral_count"], "onboarding_count": c["onboarding_count"]}
+
+class TuningBody(BaseModel):
+    adventurous: int = Field(50, ge=0, le=100)
+    hidden: int = Field(50, ge=0, le=100)
+    international: int = Field(50, ge=0, le=100)
+    length: int = Field(50, ge=0, le=100)
+
+
+@router.get("/me/tuning")
+def get_tuning(user=Depends(current_user), db: Session = Depends(get_db)) -> dict:
+    raw = db.execute(text("SELECT tuning FROM user_preferences WHERE user_id = :u"), {"u": user["id"]}).scalar() or {}
+    return TuningBody(**raw).model_dump()
+
+
+@router.put("/me/tuning")
+def put_tuning(body: TuningBody, user=Depends(current_user), db: Session = Depends(get_db)) -> dict:
+    """The Tune sliders; the engine re-ranks Top Picks, the hero and Discover with them (engine Tuning)."""
+    import json
+    db.execute(text("""INSERT INTO user_preferences (user_id, tuning) VALUES (:u, CAST(:t AS jsonb))
+        ON CONFLICT (user_id) DO UPDATE SET tuning = CAST(:t AS jsonb), updated_at = now()"""),
+               {"u": user["id"], "t": json.dumps(body.model_dump())})
+    db.commit()
+    return body.model_dump()

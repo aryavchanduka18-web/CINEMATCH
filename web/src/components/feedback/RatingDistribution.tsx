@@ -7,7 +7,7 @@ export default function RatingDistribution({ hist }: { hist: number[] }) {
     <div>
       <div className="flex h-24 items-end gap-1.5" role="img" aria-label="Rating distribution from 1 to 10">
         {hist.map((n, i) => (
-          <div key={i} className="flex flex-1 flex-col items-center gap-1">
+          <div key={i} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
             <div className="w-full rounded-sm bg-white/70" style={{ height: `${(n / max) * 100}%`, minHeight: n ? 2 : 0 }} title={`${i + 1}/10: ${n}`} />
           </div>
         ))}
