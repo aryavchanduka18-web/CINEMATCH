@@ -8,3 +8,9 @@ hollywood:
   classic_min_vote_count: 1000      # released before 1990
   collection_min_vote_count: 1000   # part of a TMDB collection (franchise)
   pool_min_vote_count: 1000         # discover pool floor (the lowest rule above)
+# Franchise rule (approved by Aryav 2026-10-08): a missing part of a TMDB collection that already has a
+# film in the catalog is added as part D when it is released, passes the metadata gate and has at least
+# min_vote_count TMDB votes (keeps out shorts and obscure direct-to-video spin-offs). pipeline/franchises.py
+franchise:
+  min_vote_count: 200
+  min_runtime_min: 60

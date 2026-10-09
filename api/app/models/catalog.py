@@ -79,6 +79,9 @@ class Movie(Base):
     rating_hist: Mapped[list[int] | None] = mapped_column(ARRAY(Integer))
     popularity_score: Mapped[float | None] = mapped_column(REAL)
     tmdb_vote_count: Mapped[int | None] = mapped_column(Integer)
+    # TMDB collection (franchise), for "More from <collection>" on the film page.
+    collection_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    collection_name: Mapped[str | None] = mapped_column(Text)
     search_vector = mapped_column(TSVECTOR)
     title_norm: Mapped[str | None] = mapped_column(Text, Computed(TITLE_NORM_SQL, persisted=True))
 

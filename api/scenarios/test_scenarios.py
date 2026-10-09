@@ -1,7 +1,7 @@
 """The 12 scenario tests of spec section 16."""
 import numpy as np
 
-from conftest import films_in, find, genre_ids, genres_of, onboard, top_ids
+from conftest import CREATED, films_in, find, genre_ids, genres_of, onboard, top_ids
 
 CRIME_LIKE = {"Crime", "Thriller", "Mystery"}
 
@@ -123,3 +123,18 @@ def test_12_every_reason_has_at_least_20_percent(client):
         for reason in item["reasons"]:
             if reason["source"] not in ("preferences", "rerank"):
                 assert reason["share"] >= 0.2
+
+def test_13_more_like_this_is_similarity_alone(client):
+    """Sholay: other Hindi films, not Hollywood hits that MovieLens users also rated. The same list for
+    every user (nothing personal), and franchise parts surface for a franchise film."""
+    sholay = find("SELECT id FROM movies WHERE title = 'Sholay' AND year = 1975")
+    assert sholay, "Sholay (1975) is in the catalog"
+    sims = client.get(f"/api/movies/{sholay[0]}/similar").json()["items"]
+    assert all(s["movie"]["language"] == "hi" for s in sims[:10])
+    other = client.__class__(client.app)
+    CREATED.append(other.post("/api/auth/guest").json()["id"])
+    assert [s["movie"]["id"] for s in other.get(f"/api/movies/{sholay[0]}/similar").json()["items"]] == \
+        [s["movie"]["id"] for s in sims]
+    iron_man = find("SELECT id FROM movies WHERE title = 'Iron Man' AND year = 2008")
+    titles = [s["movie"]["title"] for s in client.get(f"/api/movies/{iron_man[0]}/similar").json()["items"][:5]]
+    assert "Iron Man 2" in titles

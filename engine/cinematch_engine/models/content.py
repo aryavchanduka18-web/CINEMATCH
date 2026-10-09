@@ -31,11 +31,19 @@ class ContentFeatures:
     block_vocab: dict[str, list[str]] = field(default_factory=dict)
     weights: dict[str, float] = field(default_factory=dict)
     fit_sizes: dict[str, int] = field(default_factory=dict)
+    stage_sizes: dict[str, list[int]] = field(default_factory=dict)
 
     def fit_columns(self) -> np.ndarray:
         """Columns learned from the fit films (see build_blocks), in matrix order."""
         return np.concatenate([np.arange(lo, lo + self.fit_sizes.get(b, hi - lo))
                                for b, (lo, hi) in self.block_columns.items()])
+
+    def columns_up_to(self, stage: int) -> np.ndarray:
+        """Columns that exist once the films of stages 0..stage are in (see build_blocks `stage`)."""
+        def size(b, lo, hi):
+            sizes = self.stage_sizes.get(b)
+            return (hi - lo) if not sizes else sizes[min(stage, len(sizes) - 1)]
+        return np.concatenate([np.arange(lo, lo + size(b, lo, hi)) for b, (lo, hi) in self.block_columns.items()])
 
 
 @dataclass
@@ -46,6 +54,7 @@ class ContentBlocks:
     vectorizer: TfidfVectorizer
     vocab: dict[str, list[str]]
     fit_sizes: dict[str, int] = field(default_factory=dict)   # leading columns of each block learned from the fit films
+    stage_sizes: dict[str, list[int]] = field(default_factory=dict)  # block width once stages 0..k are in
 
 
 def film_text(movies: pd.DataFrame) -> pd.Series:
@@ -69,11 +78,15 @@ def _labels(movies: pd.DataFrame, credits: pd.DataFrame) -> dict[str, list[list[
 
 
 def build_blocks(movies: pd.DataFrame, credits: pd.DataFrame, ngram_max: int = 2,
-                 fit_mask: np.ndarray | None = None) -> ContentBlocks:
+                 fit_mask: np.ndarray | None = None, stage: np.ndarray | None = None) -> ContentBlocks:
     """Feature blocks for every film. With `fit_mask`, the TF-IDF vocabulary and weights are learned from
     the masked films only (the other films' unseen words are ignored), and labels (genres, people, ...)
     that only the other films have get extra columns at the end of their block. Existing films have
-    zeros there, so adding films leaves their feature values, and every similarity between them, unchanged."""
+    zeros there, so adding films leaves their feature values, and every similarity between them, unchanged.
+
+    `stage` (optional, one int per film: 0 first build, 1, 2, ... later additions) orders the extra labels
+    by the stage that first brought them in, so the columns of an earlier stage keep their positions when
+    a later stage is added. Without it every extra label is stage 0 and they are simply sorted."""
     fit = movies if fit_mask is None else movies[np.asarray(fit_mask, dtype=bool)]
     # min_df=2 drops one-off words; skipped for tiny corpora (tests), where it would remove everything.
     min_df = 2 if len(fit) >= 50 else 1
@@ -83,15 +96,24 @@ def build_blocks(movies: pd.DataFrame, credits: pd.DataFrame, ngram_max: int = 2
     blocks = {"text": sp.csr_matrix(vectorizer.transform(film_text(movies)))}
     vocab = {"text": vectorizer.get_feature_names_out().tolist()}
     fit_sizes = {"text": len(vocab["text"])}
+    stage = np.zeros(len(movies), dtype=int) if stage is None else np.asarray(stage, dtype=int)
+    n_stages = int(stage.max()) + 1 if len(stage) else 1
     fit_labels = _labels(fit, credits)
+    stage_sizes = {}
     for name, labels in _labels(movies, credits).items():
         known = sorted({x for ls in fit_labels[name] for x in ls})
-        extra = sorted({x for ls in labels for x in ls} - set(known))
+        known_set, first = set(known), {}
+        for st, ls in zip(stage, labels):
+            for x in ls:
+                if x not in known_set:
+                    first[x] = min(first.get(x, st), st)
+        extra = sorted(first, key=lambda x: (first[x], x))
         mlb = MultiLabelBinarizer(classes=known + extra, sparse_output=True)
         blocks[name] = sp.csr_matrix(mlb.fit_transform(labels), dtype=np.float32)
         vocab[name] = [str(c) for c in mlb.classes_]
         fit_sizes[name] = len(known)
-    return ContentBlocks(blocks, movies["tmdb_id"].to_numpy(), vectorizer, vocab, fit_sizes)
+        stage_sizes[name] = [len(known) + sum(1 for x in extra if first[x] <= k) for k in range(n_stages)]
+    return ContentBlocks(blocks, movies["tmdb_id"].to_numpy(), vectorizer, vocab, fit_sizes, stage_sizes)
 
 
 def combine(cb: ContentBlocks, weights: dict[str, float] | None = None) -> ContentFeatures:
@@ -105,7 +127,7 @@ def combine(cb: ContentBlocks, weights: dict[str, float] | None = None) -> Conte
         columns[name] = (start, start + block.shape[1])
         start += block.shape[1]
     matrix = normalize(sp.hstack(parts, format="csr"), norm="l2").astype(np.float32)
-    return ContentFeatures(matrix, cb.tmdb_ids, cb.vectorizer, columns, cb.vocab, weights, cb.fit_sizes)
+    return ContentFeatures(matrix, cb.tmdb_ids, cb.vectorizer, columns, cb.vocab, weights, cb.fit_sizes, cb.stage_sizes)
 
 
 def build_content_features(movies: pd.DataFrame, credits: pd.DataFrame,
