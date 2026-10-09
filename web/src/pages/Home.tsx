@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, Navigate } from "react-router-dom";
-import { useHome, useMe, useSetMode } from "../api/hooks";
+import { useCollections, useHome, useMe, useSetMode } from "../api/hooks";
 import type { Mode } from "../api/types";
 import DiscoveryModeControl from "../components/discovery/DiscoveryModeControl";
 import TonightPanel from "../components/discovery/TonightPanel";
@@ -16,6 +16,7 @@ export default function Home() {
   const home = useHome(mode);
   const saveMode = useSetMode();
   const [tonight, setTonight] = useState(false);
+  const collections = useCollections();
 
   if (me.data && !me.data.onboarded) return <Navigate to="/onboarding" replace />;
   if (home.isError) return <PageMessage title="Recommendations are not ready">{(home.error as Error).message}</PageMessage>;
@@ -48,6 +49,10 @@ export default function Home() {
           {home.data?.rails.map((r) => (
             <Rail key={r.key} title={r.title} items={r.items} source={`rail:${r.key.split(":")[0]}`}
               personal={PERSONAL.has(r.key) || r.items.some((i) => i.match_pct != null)} />
+          ))}
+          {home.data && collections.data?.collections.map((c) => (
+            <Rail key={c.key} title={c.title} subtitle={`${c.count.toLocaleString()} films`} items={c.items}
+              source={`collection:${c.key}`} personal={c.items.some((i) => i.match_pct != null)} />
           ))}
         </div>
       </div>

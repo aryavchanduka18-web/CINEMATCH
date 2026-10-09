@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from app.config import ROOT_DIR, get_settings
-from app.routers import activity, auth, catalog, feedback, health, lab, me, onboarding, recs
+from app.routers import activity, auth, catalog, collections, feedback, health, lab, me, onboarding, recs
 
 settings = get_settings()
 log = logging.getLogger("uvicorn.error")      # shows in the server log next to uvicorn's own lines
@@ -44,7 +44,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for r in (health, auth, me, onboarding, catalog, feedback, recs, activity, lab):
+for r in (health, auth, me, onboarding, catalog, collections, feedback, recs, activity, lab):
     app.include_router(r.router, prefix="/api")
 
 
