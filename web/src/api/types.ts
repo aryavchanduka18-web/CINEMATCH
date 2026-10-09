@@ -76,6 +76,7 @@ export type MovieDetail = {
   match_pct?: number | null;
   why?: Reason[];
   collection: { id: number; name: string } | null;
+  in_profile?: boolean;
   confidence?: import("../components/explain/ConfidenceCard").Confidence;
 };
 

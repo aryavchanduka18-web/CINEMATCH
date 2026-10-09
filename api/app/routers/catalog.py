@@ -30,9 +30,15 @@ def movie(movie_id: int, request: Request, db: Session = Depends(get_db)) -> dic
             scores = engine.rail_scores(st, source_scores)
             raw = float(scores[row]) if np.isfinite(scores[row]) else None
             d["match_pct"] = engine.match(st.stage, raw) if raw is not None else None
-            shares = _shares(engine, st, row, source_scores)
-            d["why"] = engine.reasons(st, row, shares)
-            d["confidence"] = confidence(engine, st, row, d["match_pct"], source_scores)
+            us = d["user_state"]
+            if d["match_pct"] is None and (us["rating"] is not None or us["reaction"] != 0):
+                # Already rated, liked or disliked: part of the user's profile, not recommended back to them,
+                # so no "why you're seeing this" and no confidence card (the page says so instead).
+                d["in_profile"] = True
+            else:
+                shares = _shares(engine, st, row, source_scores)
+                d["why"] = engine.reasons(st, row, shares)
+                d["confidence"] = confidence(engine, st, row, d["match_pct"], source_scores)
     return d
 
 

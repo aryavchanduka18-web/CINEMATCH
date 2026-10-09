@@ -1,0 +1,63 @@
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
+import type { RecItem } from "../../api/types";
+import { UIProvider } from "../layout/ui";
+import MovieCard from "./MovieCard";
+
+const item: RecItem = {
+  movie: { id: 7, title: "Test Film", year: 2017, poster: null, backdrop: null, logo: null, genres: ["Action"],
+    language: "en", runtime: 120, community_rating: 7.5, dominant_color: null, overview_short: "A short plot." },
+  score: 0.8, match_pct: 85, reasons: [{ code: "x", text: "Because of a test", share: 1 }],
+  user_state: { rating: null, reaction: 0, in_list: false, watched: false },
+};
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  // A device with a real mouse, so the hover card is used.
+  vi.stubGlobal("matchMedia", (q: string) => ({ matches: true, media: q, addEventListener() {}, removeEventListener() {} }));
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ directors: [], cast: [] }), { status: 200 }));
+});
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+function setup() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const view = render(
+    <QueryClientProvider client={client}>
+      <UIProvider>
+        <MemoryRouter>
+          <div data-testid="rail" style={{ overflowX: "auto" }}>
+            <MovieCard item={item} source="test" position={0} />
+          </div>
+        </MemoryRouter>
+      </UIProvider>
+    </QueryClientProvider>,
+  );
+  const card = screen.getByRole("button", { name: "Test Film (2017)" }).parentElement!;
+  fireEvent.mouseEnter(card);
+  act(() => vi.advanceTimersByTime(300));
+  return { view, card };
+}
+
+test("the hover details render outside the rail, so the rail cannot clip them", () => {
+  setup();
+  const details = screen.getByTestId("hover-details");
+  expect(screen.getByTestId("rail")).not.toContainElement(details);
+  expect(document.body).toContainElement(details);
+});
+
+test("the mouse wheel over the card or its details scrolls only the details", () => {
+  const { card } = setup();
+  const details = screen.getByTestId("hover-details");
+  const body = screen.getByLabelText("Test Film details");
+  for (const target of [details, card]) {
+    const wheel = new WheelEvent("wheel", { deltaY: 40, bubbles: true, cancelable: true });
+    target.dispatchEvent(wheel);
+    expect(wheel.defaultPrevented).toBe(true);        // the page and the rail do not move
+  }
+  expect(body.scrollTop).toBe(80);
+});
