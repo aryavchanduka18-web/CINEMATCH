@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { useFeedback, useFranchise, useLogEvent, useMovie, useSimilar } from "../api/hooks";
+import ConfidenceCard from "../components/explain/ConfidenceCard";
 import WhyThis from "../components/explain/WhyThis";
 import ActionButtons from "../components/feedback/ActionButtons";
 import RatingDistribution from "../components/feedback/RatingDistribution";
@@ -60,9 +61,10 @@ export default function Movie() {
       </section>
 
       <div className="mx-auto grid max-w-[1800px] gap-10 px-4 md:grid-cols-[2fr_1fr] md:px-10">
-        <div className="space-y-8">
+        <div className="min-w-0 space-y-8">
           {m.overview && <p className="max-w-3xl text-base leading-relaxed text-white/90">{m.overview}</p>}
           <WhyThis reasons={m.why} />
+          <ConfidenceCard c={m.confidence} />
           <Credits title="Directed by" people={m.directors} />
           <Credits title="Written by" people={m.writers} />
           <div>
@@ -88,7 +90,7 @@ export default function Movie() {
             </div>
           )}
         </div>
-        <aside className="space-y-8">
+        <aside className="min-w-0 space-y-8">
           <div>
             <h3 className="mb-3 text-sm font-semibold text-muted">Ratings</h3>
             <RatingDistribution hist={m.rating_hist} />
