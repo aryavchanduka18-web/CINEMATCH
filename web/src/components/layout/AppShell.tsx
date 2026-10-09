@@ -15,7 +15,7 @@ export default function AppShell() {
     <div className="min-h-screen bg-bg text-ink">
       <NavBar />
       <GuestBanner />
-      <main>
+      <main className="pb-20 md:pb-0">
         <Outlet />
       </main>
       <Footer />
