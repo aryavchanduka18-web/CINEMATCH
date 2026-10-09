@@ -13,7 +13,7 @@ MOVIE_COLUMNS = [
     "tmdb_id", "ml_movie_id", "imdb_id", "title", "original_title", "overview", "release_date", "year",
     "runtime_min", "original_language", "spoken_languages", "countries", "certification", "poster_path",
     "backdrop_path", "dominant_color", "tagline", "studios", "logo_path", "catalog_part",
-    "ml_rating_count", "ml_rating_mean", "rating_hist", "tmdb_vote_count",
+    "ml_rating_count", "ml_rating_mean", "rating_hist", "tmdb_vote_count", "collection_id", "collection_name",
 ]
 CHUNK = 2000
 USER_TABLES = ("onboarding_picks", "ratings", "reactions", "user_movie_list", "watched",

@@ -102,6 +102,7 @@ def detail(db: Session, movie_id: int, user_id: int | None) -> dict | None:
         "studios": m["studios"], "genres": genres, "keywords": keywords, "awards": awards,
         "directors": by_role("director"), "writers": by_role("writer"), "cast": by_role("cast"),
         "catalog_part": m["catalog_part"],
+        "collection": {"id": m["collection_id"], "name": m["collection_name"]} if m["collection_id"] else None,
         "community_rating": community_rating(m["popularity_score"], site[0], site[1]),
         "rating_count": int((m["ml_rating_count"] or 0) + site[0]), "rating_hist": hist,
         "user_state": user_states(db, user_id, [movie_id])[movie_id],

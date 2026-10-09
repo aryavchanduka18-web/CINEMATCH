@@ -37,7 +37,19 @@ def load_candidates() -> tuple[pd.DataFrame, dict]:
     abc["prio"] = abc["part"].map({"A": 0, "B": 1, "C": 2})
     abc = abc.sort_values("prio").drop_duplicates("tmdb_id").drop(columns="prio")
     cand = pd.concat([abc, cand[cand["part"] == "D"].drop_duplicates("tmdb_id")], ignore_index=True)
+    return gate(cand)
 
+
+def load_franchise_candidates() -> tuple[pd.DataFrame, dict]:
+    """Missing parts of catalog franchises (pipeline/franchises.py), gated like the other candidates.
+    Kept apart from the main pool so the original selection cannot change."""
+    path = PROCESSED / "franchise_candidates.csv"
+    if not path.exists():
+        return pd.DataFrame(columns=["tmdb_id", "passed", "status", "release_date", "part"]), {}
+    return gate(pd.read_csv(path).drop(columns=["franchise"], errors="ignore"))
+
+
+def gate(cand: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     details, rows = {}, []
     for tmdb_id in cand["tmdb_id"].unique():
         path = TMDB_DIR / f"{tmdb_id}.json"
@@ -129,12 +141,21 @@ def main() -> None:
     base, chosen = select(gated.assign(passed=gated["original_passed"]), CFG, start, end)
     extra = relaxed_additions(gated, base, chosen, CFG, start, end)
     catalog = pd.concat([base.assign(relaxed_gate=False), extra.assign(relaxed_gate=True)], ignore_index=True)
-    log.info("selected %s with %s; relaxed gate added %s", base["part"].value_counts().to_dict(), chosen,
-             extra["part"].value_counts().to_dict())
+    # Then the franchise rule: missing parts of catalog collections that pass the relaxed gate, as part D.
+    fr_gated, fr_details = load_franchise_candidates()
+    details |= fr_details
+    fr = fr_gated[fr_gated["passed"].fillna(False).astype(bool) & (fr_gated["status"] == "Released")
+                  & (pd.to_datetime(fr_gated["release_date"]).dt.date <= end)
+                  & ~fr_gated["tmdb_id"].isin(catalog["tmdb_id"])].drop_duplicates("tmdb_id")
+    catalog = pd.concat([catalog.assign(franchise_rule=False),
+                         fr.assign(part="D", ml_movie_id=pd.NA, relaxed_gate=False, franchise_rule=True)],
+                        ignore_index=True)
+    log.info("selected %s with %s; relaxed gate added %s; franchise rule added %d", base["part"].value_counts().to_dict(),
+             chosen, extra["part"].value_counts().to_dict(), len(fr))
 
     movies = pd.DataFrame([parse_movie(details[t]) for t in catalog["tmdb_id"]])
-    movies = movies.merge(catalog[["tmdb_id", "part", "ml_movie_id", "relaxed_gate"]].rename(columns={"part": "catalog_part"}),
-                          on="tmdb_id")
+    movies = movies.merge(catalog[["tmdb_id", "part", "ml_movie_id", "relaxed_gate", "franchise_rule"]]
+                          .rename(columns={"part": "catalog_part"}), on="tmdb_id")
     movies["ml_movie_id"] = movies["ml_movie_id"].astype("Int64")
     # Same IMDb id under two TMDB ids is a duplicate: keep the first (highest-priority part).
     has_imdb = movies["imdb_id"].notna()
@@ -147,7 +168,7 @@ def main() -> None:
     credits = pd.DataFrame([row for t in movies["tmdb_id"] for row in parse_credits(details[t])])
     movies.to_parquet(PROCESSED / "movies_clean.parquet", index=False)
     credits.to_parquet(PROCESSED / "credits_clean.parquet", index=False)
-    movies[["tmdb_id", "catalog_part", "ml_movie_id", "imdb_id", "relaxed_gate"]].to_csv(PROCESSED / "catalog_ids.csv", index=False)
+    movies[["tmdb_id", "catalog_part", "ml_movie_id", "imdb_id", "relaxed_gate", "franchise_rule"]].to_csv(PROCESSED / "catalog_ids.csv", index=False)
 
     dropped = relevant_drops(gated)
     write_json(PROCESSED / "metadata_report.json", {
@@ -157,6 +178,7 @@ def main() -> None:
         "catalog_size": len(movies),
         "by_part": movies["catalog_part"].value_counts().to_dict(),
         "added_by_relaxed_gate": movies.loc[movies["relaxed_gate"], "catalog_part"].value_counts().to_dict(),
+        "added_by_franchise_rule": int(movies["franchise_rule"].sum()),
         "part_b_by_language": movies[movies["catalog_part"] == "B"]["original_language"].value_counts().to_dict(),
         "candidates": int(gated["tmdb_id"].nunique()),
         "part_notes": {"A": "MovieLens films", "B": "curated international", "C": "new & notable",

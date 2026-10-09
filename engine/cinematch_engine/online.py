@@ -401,18 +401,34 @@ class OnlineEngine:
                 counts[g] = counts.get(g, 0) + 1
         return counts
 
+    # More Like This weights (similarity only, nothing personal): the tuned content cosine, plus genre
+    # overlap (Jaccard), same original language, and release years close together (12-year scale).
+    SIMILAR_GENRE_W, SIMILAR_LANGUAGE_W, SIMILAR_ERA_W, SIMILAR_ERA_SCALE = 0.3, 0.2, 0.1, 12.0
+
     def similar(self, row: int, k: int = 20) -> list[int]:
-        """More Like This: item CF neighbors when the film has them, topped up by content neighbors."""
+        """More Like This: the films most similar to this one, by content alone (no user, no co-ratings).
+        Score = content cosine + 0.3 genre Jaccard + 0.2 same language + 0.1 exp(-|year gap| / 12)."""
         cat = self.cat
-        out = []
-        u = cat.universe_of_row[row]
-        if u >= 0:
-            out = [int(cat.universe_rows[j]) for j, v in zip(self.nb_idx[u], self.nb_vals[u]) if v > 0][: k // 2]
-        sims = np.asarray((cat.content @ cat.content[row].T).todense()).ravel()
-        sims[row] = -1
-        for r in np.argsort(-sims):
-            if len(out) >= k:
-                break
-            if int(r) not in out:
-                out.append(int(r))
-        return out
+        cos = np.asarray((cat.content @ cat.content[row].T).todense()).ravel()
+        g = self._genre_matrix()
+        shared = np.asarray((g @ g[row].T).todense()).ravel()
+        sizes = np.asarray(g.sum(axis=1)).ravel()
+        union = sizes + sizes[row] - shared
+        jac = np.divide(shared, union, out=np.zeros_like(shared, dtype=np.float64), where=union > 0)
+        same_lang = np.array([l == cat.language[row] and l != "" for l in cat.language], dtype=np.float64)
+        gap = np.abs(cat.year - cat.year[row])
+        era = np.where(np.isfinite(gap), np.exp(-np.nan_to_num(gap, nan=0.0) / self.SIMILAR_ERA_SCALE), 0.0)
+        score = cos + self.SIMILAR_GENRE_W * jac + self.SIMILAR_LANGUAGE_W * same_lang + self.SIMILAR_ERA_W * era
+        score[row] = -np.inf
+        top = np.argpartition(-score, k)[:k]
+        return [int(r) for r in top[np.argsort(-score[top])]]
+
+    def _genre_matrix(self) -> sp.csr_matrix:
+        """Films x genres, 1 where the film has the genre (built once, for More Like This)."""
+        if getattr(self, "_genres_mh", None) is None:
+            names = sorted({x for gs in self.cat.genres for x in gs})
+            col = {n: i for i, n in enumerate(names)}
+            rows = [r for r, gs in enumerate(self.cat.genres) for _ in gs]
+            cols = [col[x] for gs in self.cat.genres for x in gs]
+            self._genres_mh = sp.csr_matrix((np.ones(len(rows)), (rows, cols)), shape=(self.cat.n, len(names)))
+        return self._genres_mh

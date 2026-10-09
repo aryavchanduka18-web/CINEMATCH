@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import type { RecItem } from "../../api/types";
 import MovieCard from "../card/MovieCard";
 
-type Props = { title: string; items: RecItem[]; source: string; personal?: boolean };
+type Props = { title: string; subtitle?: string; items: RecItem[]; source: string; personal?: boolean };
 
 /** One horizontal rail. Card width gives about 2-3 large cards on desktop with the next one peeking,
  *  about 2 on tablet and 1-1.5 on phones (spec 8.4). Vertical padding keeps hovered cards unclipped. */
-export default function Rail({ title, items, source, personal = true }: Props) {
+export default function Rail({ title, subtitle, items, source, personal = true }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const [edge, setEdge] = useState({ start: true, end: false });
 
@@ -26,6 +26,7 @@ export default function Rail({ title, items, source, personal = true }: Props) {
   return (
     <section className="group/rail relative" aria-label={title}>
       <h2 className="mb-1 px-4 font-display text-lg font-bold md:px-10 md:text-xl">{title}</h2>
+      {subtitle && <p className="-mt-0.5 mb-1 px-4 text-xs text-muted md:px-10">{subtitle}</p>}
       <div
         ref={scroller}
         onScroll={update}

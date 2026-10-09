@@ -118,3 +118,18 @@ def user_state(db: Session, user_id: int, engine: OnlineEngine) -> UserState:
         st.liked_genres = [names[g] for g in (pref[1] or []) if g in names]
         st.disliked_genres = [names[g] for g in (pref[2] or []) if g in names]
     return st
+
+def match_for(db: Session, user_id: int | None, movie_ids: list[int]) -> dict[int, dict]:
+    """Match % (and the hybrid score) for each film the engine can score for this user. Films it cannot
+    score (already rated, or no signal) are left out: the page then shows no number for them."""
+    if user_id is None or not movie_ids or not artifacts_ready():
+        return {}
+    engine = load_engine(db)
+    st = user_state(db, user_id, engine)
+    scores = engine.rail_scores(st)
+    out = {}
+    for mid in movie_ids:
+        row = engine.cat.row_of.get(mid)
+        if row is not None and np.isfinite(scores[row]):
+            out[mid] = {"score": float(scores[row]), "match_pct": engine.match(st.stage, float(scores[row]))}
+    return out
