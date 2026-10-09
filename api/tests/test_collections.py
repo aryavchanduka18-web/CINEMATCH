@@ -47,3 +47,15 @@ def test_collection_page_and_unknown_key(films):
     c = TestClient(app)
     assert c.get("/api/collections/rom-com").json()["count"] == 6
     assert c.get("/api/collections/nope").status_code == 404
+
+
+def test_disliked_and_watched_films_leave_the_collection(films, test_engine):
+    c = TestClient(app)
+    c.post("/api/auth/guest")
+    with test_engine.connect() as conn:
+        big = conn.execute(text("SELECT id FROM movies WHERE tmdb_id = 940002")).scalar()
+        three = conn.execute(text("SELECT id FROM movies WHERE tmdb_id = 940004")).scalar()
+    c.put(f"/api/reactions/{big}", json={"value": -1})
+    c.put(f"/api/watched/{three}")
+    titles = [i["movie"]["title"] for i in c.get("/api/collections/rom-com").json()["items"]]
+    assert "Big Romcom" not in titles and "Romcom Three" not in titles and "Leap Year" in titles

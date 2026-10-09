@@ -150,3 +150,12 @@ def test_14_pages_of_films_you_liked_or_rated_open(client):
     for f in films:
         res = client.get(f"/api/movies/{f}")
         assert res.status_code == 200, f
+
+
+def test_15_a_disliked_film_leaves_home(client):
+    onboard(client, find("SELECT id FROM movies WHERE title IN ('Inception', 'Zodiac', 'Heat', 'Se7en', 'Memento')"))
+    first = client.get("/api/recs/home").json()["hero"][0]["movie"]["id"]
+    client.put(f"/api/reactions/{first}", json={"value": -1})
+    home = client.get("/api/recs/home").json()
+    shown = {i["movie"]["id"] for i in home["hero"]} | {i["movie"]["id"] for r in home["rails"] for i in r["items"]}
+    assert first not in shown

@@ -217,7 +217,8 @@ function HoverDetails({ item, source, anchor, body, onEnter, onLeave }: {
       data-testid="hover-details"
     >
       <div className="flex items-center justify-between p-3 pb-2">
-        <ActionButtons movieId={m.id} state={item.user_state} source={source} />
+        {/* The film's own record (fresh) wins over the rail's copy, which may be older. */}
+        <ActionButtons movieId={m.id} state={detail.data?.user_state ?? item.user_state} source={source} />
         <button
           onClick={() => openQuickView(item)}
           className="grid h-8 w-8 place-items-center rounded-full border border-white/30 text-white hover:border-white"

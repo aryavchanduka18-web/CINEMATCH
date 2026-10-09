@@ -1,5 +1,6 @@
 """Themed collections (services/collections.py): rails for Home and a page per collection."""
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.auth import user_id_from
@@ -13,11 +14,20 @@ RAIL = 20
 PAGE = 40
 
 
+def hidden(db: Session, uid: int | None) -> set[int]:
+    """Films the user disliked or has watched: like Home, collections do not offer them again."""
+    if uid is None:
+        return set()
+    return set(db.execute(text("""SELECT movie_id FROM reactions WHERE user_id = :u AND value = -1
+        UNION SELECT movie_id FROM watched WHERE user_id = :u"""), {"u": uid}).scalars())
+
+
 @router.get("/collections")
 def collections(request: Request, db: Session = Depends(get_db)) -> dict:
     """Every collection with at least MIN_FILMS films, each with its first RAIL films for this user."""
     uid = user_id_from(request, db)
-    members = {c["key"]: col.member_ids(db, c) for c in col.COLLECTIONS}
+    skip = hidden(db, uid)
+    members = {c["key"]: [i for i in col.member_ids(db, c) if i not in skip] for c in col.COLLECTIONS}
     members = {k: v for k, v in members.items() if len(v) >= col.MIN_FILMS}
     match = rec.match_for(db, uid, sorted({i for ids in members.values() for i in ids}))
     out = []
@@ -36,7 +46,8 @@ def collection(key: str, request: Request, page: int = 1, db: Session = Depends(
     if c is None:
         raise HTTPException(404, "Unknown collection")
     uid = user_id_from(request, db)
-    members = col.member_ids(db, c)
+    skip = hidden(db, uid)
+    members = [i for i in col.member_ids(db, c) if i not in skip]
     match = rec.match_for(db, uid, members)
     ids = col.ordered(db, c, match, members)
     page = max(page, 1)

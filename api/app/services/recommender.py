@@ -124,7 +124,10 @@ def match_for(db: Session, user_id: int | None, movie_ids: list[int]) -> dict[in
     score (already rated, or no signal) are left out: the page then shows no number for them."""
     if user_id is None or not movie_ids or not artifacts_ready():
         return {}
-    engine = load_engine(db)
+    try:
+        engine = load_engine(db)
+    except HTTPException:           # catalog not loaded yet: the lists still show, just without Match %
+        return {}
     st = user_state(db, user_id, engine)
     scores = engine.rail_scores(st)
     out = {}
