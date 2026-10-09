@@ -36,6 +36,8 @@ class User(Base):
     is_guest: Mapped[bool] = mapped_column(Boolean, server_default=text("false"), nullable=False)
     created_at: Mapped[datetime] = created_now()
     onboarded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Sessions issued before this moment are no longer accepted (see app/auth.py).
+    password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class UserPreferences(Base):
