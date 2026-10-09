@@ -1,5 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
-import { AnimatePresence, motion } from "framer-motion";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
@@ -59,6 +59,14 @@ export function CardMeta({ item, personal }: { item: RecItem; personal?: boolean
   );
 }
 
+const detailQuery = (id: number) => ({
+  queryKey: ["movie", id],
+  queryFn: () => api<MovieDetail>(`/movies/${id}`),
+  staleTime: 60_000,
+});
+const INTENT_MS = 200;          // hover intent: no flicker when the pointer crosses a rail
+const MAX_WAIT_MS = 600;        // open with placeholders if the details take longer than this
+
 export default function MovieCard({ item, source, position, personal = true }: Props) {
   const canHover = useCanHover();
   const navigate = useNavigate();
@@ -68,6 +76,9 @@ export default function MovieCard({ item, source, position, personal = true }: P
   const card = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
   const m = item.movie;
+  const qc = useQueryClient();
+  const reduce = useReducedMotion();
+  const inside = useRef(false);
   const close = () => {
     window.clearTimeout(timer.current);
     setHover(false);
@@ -99,20 +110,32 @@ export default function MovieCard({ item, source, position, personal = true }: P
       className="relative"
       onMouseEnter={() => {
         if (!canHover) return;
+        inside.current = true;
         window.clearTimeout(timer.current);
-        timer.current = window.setTimeout(() => setHover(true), 280); // hover intent: no flicker across a rail
+        // Start loading the details now, and open only when they are in (or after MAX_WAIT_MS), so the
+        // panel appears once, at its final size, instead of growing when the details arrive.
+        const ready = qc.prefetchQuery(detailQuery(m.id));
+        const started = Date.now();
+        timer.current = window.setTimeout(() => {
+          const wait = new Promise((r) => window.setTimeout(r, Math.max(0, MAX_WAIT_MS - (Date.now() - started))));
+          Promise.race([ready, wait]).then(() => {
+            if (inside.current) setHover(true);
+          });
+        }, INTENT_MS);
       }}
       onMouseLeave={() => {
+        inside.current = false;
         // A short grace period lets the pointer move from the card onto the details below it.
         window.clearTimeout(timer.current);
         timer.current = window.setTimeout(() => setHover(false), 120);
       }}
-      animate={hover ? { scale: 1.05, y: -4 } : { scale: 1, y: 0 }}
-      transition={{ duration: 0.2, ease: [0.2, 0.7, 0.2, 1] }}
       style={{ zIndex: hover ? 20 : 1 }}
     >
-      <button onClick={open} className="block w-full text-left" aria-label={`${m.title}${m.year ? ` (${m.year})` : ""}`}>
-        <CardArtwork item={item} />
+      {/* The artwork zooms inside its frame; the card itself keeps its size, so the details stay attached. */}
+      <button onClick={open} className="block w-full overflow-hidden rounded-md text-left" aria-label={`${m.title}${m.year ? ` (${m.year})` : ""}`}>
+        <motion.div animate={{ scale: hover && !reduce ? 1.04 : 1 }} transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}>
+          <CardArtwork item={item} />
+        </motion.div>
       </button>
       <div className="flex items-start justify-between gap-2">
         <CardMeta item={item} personal={personal} />
@@ -130,7 +153,14 @@ export default function MovieCard({ item, source, position, personal = true }: P
         <AnimatePresence>
           {hover && card.current && (
             <HoverDetails item={item} source={source} anchor={card.current} body={body}
-              onEnter={() => window.clearTimeout(timer.current)} onLeave={close} />
+              onEnter={() => {
+                inside.current = true;
+                window.clearTimeout(timer.current);
+              }}
+              onLeave={() => {
+                inside.current = false;
+                close();
+              }} />
           )}
         </AnimatePresence>,
         document.body,
@@ -148,7 +178,8 @@ function HoverDetails({ item, source, anchor, body, onEnter, onLeave }: {
   const { openQuickView, openWhy } = useUI();
   const m = item.movie;
   const panel = useRef<HTMLDivElement>(null);
-  const detail = useQuery({ queryKey: ["movie", m.id], queryFn: () => api<MovieDetail>(`/movies/${m.id}`), staleTime: 60_000 });
+  const detail = useQuery(detailQuery(m.id));
+  const reduce = useReducedMotion();
   const [place, setPlace] = useState(() => placement(anchor));
   // Follow the card: re-measure on any scroll (page or rail) and on resize.
   useLayoutEffect(() => {
@@ -178,10 +209,9 @@ function HoverDetails({ item, source, anchor, body, onEnter, onLeave }: {
       ref={panel}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
-      initial={{ opacity: 0, y: -4 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.16 }}
+      initial={{ opacity: 0, y: reduce ? 0 : place.above ? 6 : -6 }}
+      animate={{ opacity: 1, y: 0, transition: { duration: 0.18, ease: [0.16, 1, 0.3, 1] } }}
+      exit={{ opacity: 0, transition: { duration: 0.12, ease: "easeIn" } }}
       style={place.style}
       className={`z-[45] bg-surface shadow-2xl ring-1 ring-white/10 ${place.above ? "rounded-t-md" : "rounded-b-md"}`}
       data-testid="hover-details"
@@ -211,23 +241,49 @@ function HoverDetails({ item, source, anchor, body, onEnter, onLeave }: {
           </p>
         )}
         {(d?.overview ?? m.overview_short) && <p className="mt-2 text-xs leading-relaxed text-white/80">{d?.overview ?? m.overview_short}</p>}
-        {d && d.directors.length > 0 && (
-          <p className="mt-2 text-xs text-muted">Directed by <span className="text-white/85">{d.directors.map((x) => x.name).join(", ")}</span></p>
-        )}
-        {d && d.cast.length > 0 && (
-          <div className="mt-2 flex gap-2">
-            {d.cast.slice(0, 5).map((c) => (
-              <Link key={c.id} to={`/person/${c.id}`} className="group w-12 shrink-0 text-center" title={c.name}>
-                <div className="mx-auto h-10 w-10 overflow-hidden rounded-full bg-surface-2 ring-1 ring-white/10 group-hover:ring-white/40">
-                  {c.profile_path && <img src={tmdbImage(c.profile_path, "w300")} alt="" loading="lazy" className="h-full w-full object-cover" />}
+        {!d ? (
+          // Same size as the real rows, so nothing moves when the details arrive.
+          <div aria-hidden>
+            <div className="mt-2 h-4 w-40 animate-pulse rounded bg-white/10" />
+            <div className="mt-2 flex gap-2">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <div key={i} className="w-12 shrink-0">
+                  <div className="mx-auto h-10 w-10 animate-pulse rounded-full bg-white/10" />
+                  <div className="mx-auto mt-1 h-[13px] w-10 animate-pulse rounded bg-white/10" />
                 </div>
-                <div className="mt-1 truncate text-[10px] leading-tight text-white/70">{c.name}</div>
-              </Link>
-            ))}
+              ))}
+            </div>
           </div>
+        ) : (
+          <>
+            {d.directors.length > 0 && (
+              <p className="mt-2 text-xs text-muted">Directed by <span className="text-white/85">{d.directors.map((x) => x.name).join(", ")}</span></p>
+            )}
+            {d.cast.length > 0 && (
+              <div className="mt-2 flex gap-2">
+                {d.cast.slice(0, 5).map((c) => (
+                  <Link key={c.id} to={`/person/${c.id}`} className="group w-12 shrink-0 text-center" title={c.name}>
+                    <div className="mx-auto h-10 w-10 overflow-hidden rounded-full bg-surface-2 ring-1 ring-white/10 group-hover:ring-white/40">
+                      {c.profile_path && <FadeImg src={tmdbImage(c.profile_path, "w300")} />}
+                    </div>
+                    <div className="mt-1 truncate text-[10px] leading-tight text-white/70">{c.name}</div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </motion.div>
+  );
+}
+
+/** A small image that fades in once loaded instead of popping in. */
+function FadeImg({ src }: { src?: string }) {
+  const [loaded, setLoaded] = useState(false);
+  return (
+    <img src={src} alt="" decoding="async" onLoad={() => setLoaded(true)}
+      className={`h-full w-full object-cover transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`} />
   );
 }
 
