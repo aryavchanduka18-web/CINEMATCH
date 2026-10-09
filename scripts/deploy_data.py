@@ -22,6 +22,7 @@ import os
 import subprocess
 import sys
 import tarfile
+import time
 from pathlib import Path
 
 from sqlalchemy import create_engine, text
@@ -119,21 +120,103 @@ def refresh_catalog(engine) -> None:
     print(f"    films: {counts['movies']:,}; credits: {counts['movie_credits']:,}")
 
 
+CHUNK_BYTES = 2 * 1024 * 1024        # one insert per 2 MB survives connections that drop on large statements
+RETRIES = 6
+
+
+def target_engine(url: str):
+    """Hosted database: TCP keepalives so long statements are not cut, and a health check before each use."""
+    return create_engine(make_url(url).set(drivername="postgresql+psycopg"), pool_pre_ping=True,
+                         connect_args={"keepalives": 1, "keepalives_idle": 20, "keepalives_interval": 10,
+                                       "keepalives_count": 5, "connect_timeout": 30})
+
+
+def with_retry(engine, what: str, fn):
+    """Run fn(conn) in its own transaction; on a dropped connection wait, reconnect and try again."""
+    from sqlalchemy.exc import DBAPIError, OperationalError
+    for attempt in range(1, RETRIES + 1):
+        try:
+            with engine.begin() as conn:
+                return fn(conn)
+        except (OperationalError, DBAPIError) as e:
+            if attempt == RETRIES or not (isinstance(e, OperationalError) or e.connection_invalidated):
+                raise
+            wait = min(2 ** attempt, 30)
+            print(f"    connection dropped during {what}; retrying in {wait}s ({attempt}/{RETRIES - 1})")
+            engine.dispose()
+            time.sleep(wait)
+
+
+def upload_bundle(engine) -> None:
+    """Model bundle in CHUNK_BYTES pieces, each committed on its own, then the manifest row last. Re-running
+    resumes: chunks already stored for the same checksum are skipped. Old chunks are removed at the end."""
+    from app.services.artifact_store import BUNDLE, CHUNKS_SQL, TABLE_SQL
+    data = (OUT / "artifacts.tar.gz").read_bytes()
+    sha = hashlib.sha256(data).hexdigest()
+    parts = [data[i:i + CHUNK_BYTES] for i in range(0, len(data), CHUNK_BYTES)]
+
+    def setup(conn):
+        conn.execute(text(TABLE_SQL))
+        for sql in CHUNKS_SQL:
+            conn.execute(text(sql))
+        current = conn.execute(text("SELECT sha256, chunks FROM deploy_artifacts WHERE name = :n"), {"n": BUNDLE}).first()
+        have = set(conn.execute(text("SELECT seq FROM deploy_artifact_chunks WHERE name = :n AND sha256 = :s"),
+                                {"n": BUNDLE, "s": sha}).scalars())
+        return current, have
+    current, have = with_retry(engine, "setup", setup)
+    if current is not None and current[0] == sha and current[1] == len(parts) and len(have) == len(parts):
+        print(f"3/3 Model bundle: already there ({len(data) / 1e6:.1f} MB), skipped.")
+        return
+    print(f"3/3 Model bundle: {len(data) / 1e6:.1f} MB in {len(parts)} parts" + (f", {len(have)} already uploaded" if have else ""))
+    for seq, part in enumerate(parts):
+        if seq in have:
+            continue
+        with_retry(engine, f"part {seq + 1}", lambda conn, seq=seq, part=part: conn.execute(text(
+            """INSERT INTO deploy_artifact_chunks (name, sha256, seq, data) VALUES (:n, :s, :q, :d)
+               ON CONFLICT (name, sha256, seq) DO UPDATE SET data = :d"""), {"n": BUNDLE, "s": sha, "q": seq, "d": part}))
+        print(f"    part {seq + 1}/{len(parts)} done")
+
+    def finish(conn):
+        stored = conn.execute(text("""SELECT data FROM deploy_artifact_chunks WHERE name = :n AND sha256 = :s
+            ORDER BY seq"""), {"n": BUNDLE, "s": sha}).scalars().all()
+        if len(stored) != len(parts) or hashlib.sha256(b"".join(bytes(x) for x in stored)).hexdigest() != sha:
+            raise RuntimeError("the uploaded parts do not add up to the bundle; run upload again")
+        conn.execute(text("""INSERT INTO deploy_artifacts (name, sha256, data, chunks) VALUES (:n, :s, '', :c)
+            ON CONFLICT (name) DO UPDATE SET sha256 = :s, data = '', chunks = :c, uploaded_at = now()"""),
+                     {"n": BUNDLE, "s": sha, "c": len(parts)})
+        conn.execute(text("DELETE FROM deploy_artifact_chunks WHERE name = :n AND sha256 <> :s"), {"n": BUNDLE, "s": sha})
+    with_retry(engine, "checksum check", finish)
+    print("    checksum verified on the server copy")
+
+
 def upload(target: str | None, refresh: bool = False) -> None:
     for f in ("catalog.dump", "demo_user.json", "artifacts.tar.gz"):
         if not (OUT / f).exists():
             sys.exit(f"deploy-out/{f} is missing. Run the export step first.")
     url = _target_url(target)
-    engine = create_engine(make_url(url).set(drivername="postgresql+psycopg"))
-    with engine.connect() as conn:
-        if conn.execute(text("SELECT to_regclass('alembic_version')")).scalar() is None:
-            sys.exit("That database has no CineMatch tables yet. Deploy the web service first (it creates them), "
-                     "wait until it is live, then run this again.")
-        has_movies = conn.execute(text("SELECT count(*) FROM movies")).scalar() > 0
+    engine = target_engine(url)
+    state = with_retry(engine, "the first check", lambda conn: (
+        conn.execute(text("SELECT to_regclass('alembic_version')")).scalar(),
+        conn.execute(text("SELECT count(*) FROM movies")).scalar() if conn.execute(
+            text("SELECT to_regclass('movies')")).scalar() else 0))
+    if state[0] is None:
+        sys.exit("That database has no CineMatch tables yet. Deploy the web service first (it creates them), "
+                 "wait until it is live, then run this again.")
+    has_movies = state[1] > 0
 
     if has_movies and refresh:
         print("1/3 Catalog: refreshing from this laptop (upsert by TMDB id; accounts and their ratings are kept)...")
-        refresh_catalog(engine)
+        from sqlalchemy.exc import OperationalError
+        for attempt in range(1, 4):      # safe to repeat: every row is an upsert and a failed try rolls back
+            try:
+                refresh_catalog(engine)
+                break
+            except OperationalError:
+                if attempt == 3:
+                    raise
+                print(f"    connection dropped; trying the catalog refresh again ({attempt}/2)")
+                engine.dispose()
+                time.sleep(10)
     elif has_movies:
         print("1/3 Catalog: already there, skipped (add --refresh-catalog to bring it up to date).")
     else:
@@ -143,33 +226,28 @@ def upload(target: str | None, refresh: bool = False) -> None:
                         "/dump/catalog.dump"], check=True, env={**os.environ, "TARGET": url})
 
     demo = json.loads((OUT / "demo_user.json").read_text())
-    with engine.begin() as conn:
-        if not demo:
-            print("2/3 Demo account: none in the export, skipped.")
-        elif conn.execute(text("SELECT 1 FROM users WHERE email = :e"), {"e": DEMO_EMAIL}).first():
-            print("2/3 Demo account: already there, skipped.")
-        else:
-            u = demo["users"][0]
-            uid = conn.execute(text("""INSERT INTO users (email, password_hash, display_name, is_guest, created_at,
-                onboarded_at) VALUES (:email, :password_hash, :display_name, :is_guest, :created_at, :onboarded_at)
-                RETURNING id"""), u).scalar()
-            for t in USER_TABLES:
-                for row in demo.get(t, []):
-                    row = {k: v for k, v in row.items() if k != "id"} | {"user_id": uid}
-                    cols = ", ".join(row)
-                    conn.execute(text(f"INSERT INTO {t} ({cols}) SELECT {cols} FROM json_populate_record(NULL::{t}, :j)"),
-                                 {"j": json.dumps(row)})
-            print("2/3 Demo account: created with its ratings, likes, list and history.")
 
-    from app.services.artifact_store import BUNDLE, TABLE_SQL
-    data = (OUT / "artifacts.tar.gz").read_bytes()
-    with engine.begin() as conn:
-        conn.execute(text(TABLE_SQL))
-        conn.execute(text("""INSERT INTO deploy_artifacts (name, sha256, data) VALUES (:n, :s, :d)
-            ON CONFLICT (name) DO UPDATE SET sha256 = :s, data = :d, uploaded_at = now()"""),
-                     {"n": BUNDLE, "s": hashlib.sha256(data).hexdigest(), "d": data})
+    def add_demo(conn) -> str:
+        if not demo:
+            return "none in the export, skipped."
+        if conn.execute(text("SELECT 1 FROM users WHERE email = :e"), {"e": DEMO_EMAIL}).first():
+            return "already there, skipped."
+        u = demo["users"][0]
+        uid = conn.execute(text("""INSERT INTO users (email, password_hash, display_name, is_guest, created_at,
+            onboarded_at) VALUES (:email, :password_hash, :display_name, :is_guest, :created_at, :onboarded_at)
+            RETURNING id"""), u).scalar()
+        for t in USER_TABLES:
+            for row in demo.get(t, []):
+                row = {k: v for k, v in row.items() if k != "id"} | {"user_id": uid}
+                cols = ", ".join(row)
+                conn.execute(text(f"INSERT INTO {t} ({cols}) SELECT {cols} FROM json_populate_record(NULL::{t}, :j)"),
+                             {"j": json.dumps(row)})
+        return "created with its ratings, likes, list and history."
+    print("2/3 Demo account: " + with_retry(engine, "the demo account", add_demo))   # one transaction: all or nothing
+
+    upload_bundle(engine)
+    with engine.connect() as conn:
         conn.execute(text("ANALYZE"))
-    print(f"3/3 Model bundle: uploaded ({len(data) / 1e6:.1f} MB).")
     print("Done. In Render, open the web service and choose Manual Deploy > Restart service, then open the site.")
 
 

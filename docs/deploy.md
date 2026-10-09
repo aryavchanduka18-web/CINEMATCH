@@ -66,8 +66,12 @@ free plan fits. The database uses about 240 MB of the free plan's 1 GB.
 5. Open the site. The home page now shows the hero and the rails. The first visit after a restart can
    take about 10 seconds while the recommender loads.
 
-Running `upload` again is safe: it skips the catalog and the demo account if they are already there, and
-replaces the model bundle.
+The model bundle goes up in parts of 2 MB (`part 1/19 done` and so on); each part is saved on its own, so a
+dropped connection only costs that part, and the script reconnects and carries on by itself. At the end it
+checks the whole bundle against its checksum on the server.
+
+Running `upload` again is always safe: it skips the catalog, the demo account and the bundle when they are
+already there, and finishes a bundle upload that stopped half way.
 
 ## Updating the site later
 
@@ -102,6 +106,7 @@ replaces the model bundle.
 | Build fails on Render | Open the service's **Logs**. Most often a download timed out: click **Manual Deploy**, then **Deploy latest commit**. |
 | `/api/health` shows `"db":"error"` | The database is still starting, or the service lost its `DATABASE_URL`. In the **Environment** tab, `DATABASE_URL` must come from `cinematch-db`. |
 | `upload` says the database has no CineMatch tables | The service has not finished its first start. Wait for **Live**, then run `upload` again. |
+| `upload` stops with "SSL connection has been closed unexpectedly" | Run the same `upload` command again. It skips what is done and continues with the missing parts. |
 | `upload` cannot connect | Use the **External** URL (not the Internal one) and check that Docker Desktop is running. |
 | Home page shows no rails after the upload | Restart the service (Step 2.4). The logs should show `unpacked artifact bundle` and `recommender engine ready`. |
 | Service restarts with "out of memory" | Move the web service to the paid Starter plan. Our measurement fits 512 MB, but this is the fix if real traffic needs more. |

@@ -25,6 +25,14 @@ BUNDLE = "artifacts.tar.gz"
 MARKER = ROOT / ".bundle_sha256"
 TABLE_SQL = """CREATE TABLE IF NOT EXISTS deploy_artifacts (
     name text PRIMARY KEY, sha256 text NOT NULL, data bytea NOT NULL, uploaded_at timestamptz NOT NULL DEFAULT now())"""
+# Large bundles travel in chunks (one small insert each survives flaky connections); the deploy_artifacts row
+# is the manifest, written last: data is empty and `chunks` says how many rows of the bundle to join.
+CHUNKS_SQL = [
+    "ALTER TABLE deploy_artifacts ADD COLUMN IF NOT EXISTS chunks int",
+    """CREATE TABLE IF NOT EXISTS deploy_artifact_chunks (
+        name text NOT NULL, sha256 text NOT NULL, seq int NOT NULL, data bytea NOT NULL,
+        PRIMARY KEY (name, sha256, seq))""",
+]
 
 _lock = threading.Lock()
 _last_try = 0.0
@@ -43,12 +51,24 @@ def sync(force: bool = False) -> bool:
     with engine.connect() as conn:
         if conn.execute(text("SELECT to_regclass('deploy_artifacts')")).scalar() is None:
             return False
-        row = conn.execute(text("SELECT sha256, data FROM deploy_artifacts WHERE name = :n"), {"n": BUNDLE}).first()
-    if row is None:
-        return False
-    sha, data = row[0], bytes(row[1])
-    if not force and MARKER.exists() and MARKER.read_text().strip() == sha:
-        return False
+        chunked = conn.execute(text("""SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'deploy_artifacts' AND column_name = 'chunks'""")).first() is not None
+        row = conn.execute(text(f"SELECT sha256, data, {'chunks' if chunked else 'NULL'} FROM deploy_artifacts "
+                                "WHERE name = :n"), {"n": BUNDLE}).first()
+        if row is None:
+            return False
+        sha = row[0]
+        if not force and MARKER.exists() and MARKER.read_text().strip() == sha:
+            return False
+        if row[2]:          # chunked upload: join the parts in order
+            parts = conn.execute(text("""SELECT data FROM deploy_artifact_chunks WHERE name = :n AND sha256 = :s
+                ORDER BY seq"""), {"n": BUNDLE, "s": sha}).scalars().all()
+            if len(parts) != row[2]:
+                log.error("artifact bundle has %d of %d chunks; not unpacking", len(parts), row[2])
+                return False
+            data = b"".join(bytes(x) for x in parts)
+        else:
+            data = bytes(row[1])
     if hashlib.sha256(data).hexdigest() != sha:
         log.error("artifact bundle checksum mismatch; not unpacking")
         return False
