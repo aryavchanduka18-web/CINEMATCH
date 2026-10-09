@@ -8,7 +8,7 @@ export default function WhyThis({ reasons, compact = false }: { reasons?: Reason
     <div className={compact ? "" : "rounded-lg border border-white/10 bg-surface p-4"}>
       {!compact && <h3 className="mb-2 text-sm font-semibold">Why you're seeing this</h3>}
       <ul className="space-y-1.5 text-sm text-white/85">
-        {reasons.map((r) => (
+        {reasons.map((r, i) => (
           <li key={r.code + r.text} className="flex items-baseline gap-2">
             <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
             <span>
@@ -19,7 +19,11 @@ export default function WhyThis({ reasons, compact = false }: { reasons?: Reason
               ) : (
                 r.text
               )}
-              {!compact && r.share > 0 && <span className="ml-2 text-xs text-muted">{Math.round(r.share * 100)}% of the score</span>}
+              {!compact && r.share > 0 && (
+                <span className="ml-2 text-xs text-muted">
+                  {i === 0 && reasons.length > 1 ? "biggest reason, " : ""}about {Math.round(r.share * 100)}% of your match
+                </span>
+              )}
             </span>
           </li>
         ))}

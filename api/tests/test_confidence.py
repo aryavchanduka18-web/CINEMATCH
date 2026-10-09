@@ -62,3 +62,17 @@ def test_agreement_for_all_films_matches_the_single_film_formula():
     allv = agreement_all(eng, SimpleNamespace(stage="warm"), scores)
     for row in (0, 3, 17):
         assert allv[row] == confidence(eng, SimpleNamespace(stage="warm"), row, None, scores)["agreement"]
+
+
+def test_a_model_that_scores_every_film_the_same_is_left_out():
+    """Item CF for a new user whose ratings are all equal predicts one value for everything: it must not
+    pull the film to 'rank 0' and drag the agreement down."""
+    scores = {"svd": np.array([0.0, 1.0, 0.5]), "item_cf": np.array([0.7, 0.7, 0.7]), "content": np.array([0.1, 0.9, 0.2])}
+    c = confidence(engine({"svd": .4, "item_cf": .3, "content": .3}), SimpleNamespace(stage="warm"), 1, 80, scores)
+    assert "item_cf" not in {t["source"] for t in c["technical"]}
+    assert c["agreement"] == 100
+
+
+def test_tied_scores_share_the_middle_rank():
+    p = percentiles({"svd": np.array([1.0, 1.0, 0.0, 2.0])}, row=0)
+    assert p["svd"] == (1 + (2 + 1) / 2) / 4

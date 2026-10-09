@@ -34,12 +34,21 @@ FOR = {
 }
 
 
+def informative(vals: np.ndarray) -> bool:
+    """A source that gives every film the same score (e.g. item CF when all of a new user's ratings are equal)
+    says nothing about this film; it is left out instead of being read as 'ranks it last'."""
+    return len(vals) > 1 and float(np.ptp(vals)) > 1e-9
+
+
 def percentiles(scores: dict[str, np.ndarray], row: int) -> dict[str, float]:
+    """Mid-rank percentile: films with the same score share the middle of their rank range."""
     out = {}
     for s, v in scores.items():
         ok = np.isfinite(v)
-        if ok[row] and ok.sum() > 1:
-            out[s] = float((v[ok] < v[row]).sum() + 1) / float(ok.sum())
+        if ok[row] and informative(v[ok]):
+            vals = v[ok]
+            less, equal = float((vals < v[row]).sum()), float((vals == v[row]).sum())
+            out[s] = (less + (equal + 1) / 2) / float(len(vals))
     return out
 
 
@@ -97,12 +106,14 @@ def agreement_all(engine, st, scores: dict) -> np.ndarray:
         if weights.get(s, 0) <= 0:
             continue
         ok = np.isfinite(v)
-        if ok.sum() < 2:
+        if not informative(v[ok]):
             continue
         pct = np.full(len(v), np.nan)
         vals = v[ok]
-        # rank = number of strictly smaller scores, as in percentiles() (ties share the lower rank)
-        pct[ok] = (np.searchsorted(np.sort(vals), vals, side="left") + 1) / ok.sum()
+        srt = np.sort(vals)
+        less = np.searchsorted(srt, vals, side="left")
+        equal = np.searchsorted(srt, vals, side="right") - less
+        pct[ok] = (less + (equal + 1) / 2) / ok.sum()       # mid-rank, as in percentiles()
         cols.append(pct)
     if len(cols) < 2:
         return np.full(engine.cat.n, np.nan)

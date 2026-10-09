@@ -48,6 +48,9 @@ export default function ConfidenceCard({ c }: { c?: Confidence }) {
       </div>
 
       <p className="mt-4 text-sm leading-relaxed text-white/85">{c.sentence}</p>
+      <p className="mt-1 text-xs text-muted">
+        Agreement shows how many different methods point to the same film. It is separate from your match %.
+      </p>
 
       <dl className="mt-4 space-y-2.5">
         {c.groups.map((g) => (

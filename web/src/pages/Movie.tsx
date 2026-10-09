@@ -71,6 +71,12 @@ export default function Movie() {
       <div className="mx-auto grid max-w-[1800px] gap-10 px-4 md:grid-cols-[2fr_1fr] md:px-10">
         <div className="min-w-0 space-y-8">
           {m.overview && <p className="max-w-3xl text-base leading-relaxed text-white/90">{m.overview}</p>}
+          {m.in_profile && (
+            <p className="rounded-lg border border-white/10 bg-surface px-4 py-3 text-sm text-white/85">
+              {m.user_state.rating != null ? `You rated this ${m.user_state.rating}/10. ` : m.user_state.reaction > 0 ? "You liked this. " : "You marked this as not for you. "}
+              It is part of your taste profile, so CineMatch does not recommend it back to you; it shapes your other recommendations.
+            </p>
+          )}
           <WhyThis reasons={m.why} />
           <ConfidenceCard c={m.confidence} />
           <Credits title="Directed by" people={m.directors} />
