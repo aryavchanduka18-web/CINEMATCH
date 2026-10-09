@@ -98,7 +98,28 @@ def _target_url(arg: str | None) -> str:
     return url
 
 
-def upload(target: str | None) -> None:
+def refresh_catalog(engine) -> None:
+    """Bring an existing hosted catalog up to date without touching accounts: every film is upserted by
+    its TMDB id (hosted ids stay, so users' ratings and lists still point at the same films), new films
+    are added, nothing is deleted. Then the display popularity is copied from the laptop's database."""
+    import pandas as pd
+    sys.path.insert(0, str(ROOT))
+    from pipeline.loader import load_catalog
+    processed = ROOT / "data" / "processed"
+    counts = load_catalog(engine, pd.read_parquet(processed / "movies_clean.parquet"),
+                          pd.read_parquet(processed / "credits_clean.parquet"), pd.read_parquet(processed / "awards.parquet"),
+                          pd.read_parquet(processed / "ml_aggregates.parquet"), prune=False)
+    with create_engine(_local_url()).connect() as local:
+        pop = [{"t": t, "s": s} for t, s in local.execute(text(
+            "SELECT tmdb_id, popularity_score FROM movies WHERE popularity_score IS NOT NULL"))]
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TEMP TABLE pop (tmdb_id int PRIMARY KEY, score real) ON COMMIT DROP"))
+        conn.execute(text("INSERT INTO pop VALUES (:t, :s)"), pop)
+        conn.execute(text("UPDATE movies m SET popularity_score = p.score FROM pop p WHERE p.tmdb_id = m.tmdb_id"))
+    print(f"    films: {counts['movies']:,}; credits: {counts['movie_credits']:,}")
+
+
+def upload(target: str | None, refresh: bool = False) -> None:
     for f in ("catalog.dump", "demo_user.json", "artifacts.tar.gz"):
         if not (OUT / f).exists():
             sys.exit(f"deploy-out/{f} is missing. Run the export step first.")
@@ -110,8 +131,11 @@ def upload(target: str | None) -> None:
                      "wait until it is live, then run this again.")
         has_movies = conn.execute(text("SELECT count(*) FROM movies")).scalar() > 0
 
-    if has_movies:
-        print("1/3 Catalog: already there, skipped (the database already has films).")
+    if has_movies and refresh:
+        print("1/3 Catalog: refreshing from this laptop (upsert by TMDB id; accounts and their ratings are kept)...")
+        refresh_catalog(engine)
+    elif has_movies:
+        print("1/3 Catalog: already there, skipped (add --refresh-catalog to bring it up to date).")
     else:
         print("1/3 Catalog: restoring with pg_restore (a few minutes)...")
         subprocess.run(["docker", "run", "--rm", "-e", "TARGET", "-v", f"{OUT}:/dump:ro", "postgres:17", "sh", "-c",
@@ -155,5 +179,7 @@ if __name__ == "__main__":
     sub.add_parser("export")
     up = sub.add_parser("upload")
     up.add_argument("--target", help="database URL (otherwise TARGET_DATABASE_URL or a hidden prompt)")
+    up.add_argument("--refresh-catalog", action="store_true",
+                    help="update a catalog that is already there (new films, franchise data); accounts are kept")
     a = p.parse_args()
-    export() if a.cmd == "export" else upload(a.target)
+    export() if a.cmd == "export" else upload(a.target, a.refresh_catalog)

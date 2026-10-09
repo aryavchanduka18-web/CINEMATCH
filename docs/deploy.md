@@ -75,8 +75,15 @@ replaces the model bundle.
   Database changes (Alembic migrations) run automatically when the new version starts.
 - **New models**: run the pipeline on the laptop, then `deploy_data.py export` and `upload` again, then
   **Restart service**.
-- **New films in the catalog** (for example after the franchise update): `upload` skips a catalog that is
-  already there. Ask for help before replacing it, because accounts' ratings point at the films.
+- **New films or catalog changes** (for example the franchise update, which added 470 films and the
+  franchise names): run `export`, then
+
+  ```powershell
+  .\.venv\Scripts\python.exe scripts\deploy_data.py upload --refresh-catalog
+  ```
+
+  It updates every film by its TMDB id and adds the new ones. Nothing is deleted, so accounts, ratings and
+  lists made on the site stay as they are. It also uploads the new model bundle. Then **Restart service**.
 
 ## Things to know about the free plans
 
