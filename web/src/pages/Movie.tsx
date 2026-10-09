@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { useFeedback, useFranchise, useLogEvent, useMovie, useSimilar } from "../api/hooks";
+import ConfidenceCard from "../components/explain/ConfidenceCard";
 import WhyThis from "../components/explain/WhyThis";
 import ActionButtons from "../components/feedback/ActionButtons";
 import RatingDistribution from "../components/feedback/RatingDistribution";
@@ -60,22 +61,24 @@ export default function Movie() {
       </section>
 
       <div className="mx-auto grid max-w-[1800px] gap-10 px-4 md:grid-cols-[2fr_1fr] md:px-10">
-        <div className="space-y-8">
+        <div className="min-w-0 space-y-8">
           {m.overview && <p className="max-w-3xl text-base leading-relaxed text-white/90">{m.overview}</p>}
           <WhyThis reasons={m.why} />
+          <ConfidenceCard c={m.confidence} />
           <Credits title="Directed by" people={m.directors} />
           <Credits title="Written by" people={m.writers} />
           <div>
             <h3 className="mb-3 text-sm font-semibold text-muted">Cast</h3>
             <div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">
               {m.cast.map((c) => (
-                <div key={c.id} className="w-24 shrink-0 text-center">
-                  <div className="mx-auto h-24 w-24 overflow-hidden rounded-full bg-surface-2">
-                    {c.profile_path && <img src={tmdbImage(c.profile_path, "w300")} alt="" loading="lazy" className="h-full w-full object-cover" />}
+                <Link key={c.id} to={`/person/${c.id}`} className="group w-24 shrink-0 text-center" aria-label={`${c.name}: view filmography`}>
+                  <div className="relative mx-auto h-24 w-24 overflow-hidden rounded-full bg-surface-2 ring-1 ring-white/10 transition group-hover:ring-white/40">
+                    {c.profile_path && <img src={tmdbImage(c.profile_path, "w300")} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" />}
+                    <span className="absolute inset-0 grid place-items-center bg-black/55 px-2 text-[10px] font-medium leading-tight opacity-0 transition-opacity duration-150 group-hover:opacity-100">View filmography</span>
                   </div>
-                  <div className="mt-2 text-xs font-medium leading-tight">{c.name}</div>
+                  <div className="mt-2 text-xs font-medium leading-tight group-hover:underline">{c.name}</div>
                   {c.character && <div className="text-[11px] leading-tight text-muted">{c.character}</div>}
-                </div>
+                </Link>
               ))}
             </div>
           </div>
@@ -87,7 +90,7 @@ export default function Movie() {
             </div>
           )}
         </div>
-        <aside className="space-y-8">
+        <aside className="min-w-0 space-y-8">
           <div>
             <h3 className="mb-3 text-sm font-semibold text-muted">Ratings</h3>
             <RatingDistribution hist={m.rating_hist} />
@@ -123,7 +126,7 @@ function Credits({ title, people }: { title: string; people: { id: number; name:
       <span className="text-muted">{title} </span>
       {people.map((p, i) => (
         <span key={p.id}>
-          <Link to={`/search?q=${encodeURIComponent(p.name)}`} className="hover:underline">{p.name}</Link>
+          <Link to={`/person/${p.id}`} className="hover:underline" title="View filmography">{p.name}</Link>
           {i < people.length - 1 ? ", " : ""}
         </span>
       ))}

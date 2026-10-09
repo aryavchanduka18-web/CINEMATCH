@@ -75,6 +75,7 @@ export type MovieDetail = {
   match_pct?: number | null;
   why?: Reason[];
   collection: { id: number; name: string } | null;
+  confidence?: import("../components/explain/ConfidenceCard").Confidence;
 };
 
 export type FranchiseSection = { key: string; kind: "collection" | "universe" | "director" | "franchise_like"; title: string; current?: number; items: RecItem[] };

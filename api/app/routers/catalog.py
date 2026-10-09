@@ -8,6 +8,7 @@ from app.auth import user_id_from
 from app.db import get_db
 from app.models.catalog import normalize_sql
 from app.services import franchise as fr
+from app.services.confidence import confidence
 from app.services import recommender as rec
 from app.services.movies import cards, detail
 
@@ -25,17 +26,19 @@ def movie(movie_id: int, request: Request, db: Session = Depends(get_db)) -> dic
         st = rec.user_state(db, uid, engine)
         row = engine.cat.row_of.get(movie_id)
         if row is not None:
-            scores = engine.rail_scores(st)
+            source_scores = engine.scores(st)
+            scores = engine.rail_scores(st, source_scores)
             raw = float(scores[row]) if np.isfinite(scores[row]) else None
             d["match_pct"] = engine.match(st.stage, raw) if raw is not None else None
-            shares = _shares(engine, st, row)
+            shares = _shares(engine, st, row, source_scores)
             d["why"] = engine.reasons(st, row, shares)
+            d["confidence"] = confidence(engine, st, row, d["match_pct"], source_scores)
     return d
 
 
-def _shares(engine, st, row) -> dict:
+def _shares(engine, st, row, scores=None) -> dict:
     """Per-source share of a single film's catalog-wide hybrid score (for Why This on any page)."""
-    scores = engine.scores(st)
+    scores = scores or engine.scores(st)
     w = engine.weights[st.stage]
     parts = {}
     for s, v in scores.items():
