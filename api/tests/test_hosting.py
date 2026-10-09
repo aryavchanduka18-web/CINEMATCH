@@ -37,6 +37,7 @@ def store(test_engine, tmp_path, monkeypatch):
     yield tmp_path
     with test_engine.begin() as conn:      # keep the schema identical to the models for test_migrations
         conn.execute(text("DROP TABLE deploy_artifacts"))
+        conn.execute(text("DROP TABLE IF EXISTS deploy_artifact_chunks"))
 
 
 def _put(test_engine, data: bytes, sha: str | None = None) -> None:
@@ -77,3 +78,22 @@ def test_website_routes_fall_back_to_index_html_but_api_does_not():
     assert page.status_code == 200 and "<div id=\"root\">" in page.text
     assert c.get("/api/no-such-endpoint").status_code == 404
     assert c.get("/api/health").json()["status"] == "ok"
+
+
+def test_chunked_bundle_is_joined_in_order_and_checked(store, test_engine):
+    bundle = _bundle({"models/fitted.npz": bytes(range(256)) * 400})
+    sha = hashlib.sha256(bundle).hexdigest()
+    parts = [bundle[i:i + 1000] for i in range(0, len(bundle), 1000)]
+    with test_engine.begin() as conn:
+        for sql in artifact_store.CHUNKS_SQL:
+            conn.execute(text(sql))
+        for seq in reversed(range(len(parts))):          # stored out of order on purpose
+            conn.execute(text("INSERT INTO deploy_artifact_chunks VALUES (:n, :s, :q, :d)"),
+                         {"n": artifact_store.BUNDLE, "s": sha, "q": seq, "d": parts[seq]})
+        conn.execute(text("INSERT INTO deploy_artifacts (name, sha256, data, chunks) VALUES (:n, :s, '', :c)"),
+                     {"n": artifact_store.BUNDLE, "s": sha, "c": len(parts) + 1})
+    assert artifact_store.sync() is False                # a part is missing: nothing is unpacked
+    with test_engine.begin() as conn:
+        conn.execute(text("UPDATE deploy_artifacts SET chunks = :c"), {"c": len(parts)})
+    assert artifact_store.sync() is True
+    assert (store / "models" / "fitted.npz").read_bytes() == bytes(range(256)) * 400
