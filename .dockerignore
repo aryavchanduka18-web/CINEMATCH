@@ -1,0 +1,17 @@
+# Keep secrets, local data and build output out of the image
+.env
+.git
+.venv
+.claude
+**/__pycache__
+**/*.egg-info
+**/.pytest_cache
+**/node_modules
+web/dist
+data
+artifacts
+graphify-out
+notebooks
+docs
+preview-images
+deploy-out
