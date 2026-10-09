@@ -3,6 +3,15 @@
 An explainable hybrid movie recommendation website (college Recommender Systems project).
 It recommends movies; it does not stream them.
 
+**Live:** https://cinematch-16hy.onrender.com (Render free plan: the first visit after 15 quiet minutes takes about a
+minute). How it is hosted and how to update it: `docs/deploy.md`.
+
+What a visitor can do: create an account (or browse as a guest), rate, like, dislike (with a reason), save to My
+List, tune the recommendations, open "Why?" on any recommendation (what each model contributed, how much the
+models agree), browse franchises ("More from John Wick", "More from Marvel"), cast and crew pages, themed rows
+(Rom-Com, Crime Thriller, ...), genre and Discover pages with every film, For Tonight, and the Research Lab.
+Not available (no email service): email verification and password reset.
+
 | Part | Folder | Tech |
 | --- | --- | --- |
 | Website | `web/` | React, TypeScript, Vite, Tailwind, React Router, TanStack Query, Framer Motion |
@@ -107,6 +116,8 @@ plugged in with the lid open during long runs (sleep pauses the jobs).
 | Decisions made during the build | `docs/decisions-log.md` |
 | Things to check by hand at the end | `docs/final-checks.md` |
 | Catalog coverage audit | `docs/catalog-audit.md` |
+| Hosting on Render (step by step) | `docs/deploy.md` |
+| Hosting, franchises, confidence, v2 (viva notes) | `docs/viva/phase-14-hosting-and-v2.md` |
 | Research Lab (in the app) | http://localhost:5173/lab |
 
 ## Tests
@@ -115,7 +126,7 @@ With the database running:
 ```powershell
 .\scripts\test.ps1
 ```
-This runs the engine, pipeline and API tests (the API tests use a separate `cinematch_test` database\nthat is rebuilt on every run), the 12 scenario tests of spec section 16 (on the real catalog, with\nthrowaway users that are deleted afterwards) and the website tests.
+This runs the engine, pipeline and API tests (the API tests use a separate `cinematch_test` database\nthat is rebuilt on every run), the scenario tests (the 12 of spec section 16 plus More Like This and liked-film pages) (on the real catalog, with\nthrowaway users that are deleted afterwards) and the website tests.
 
 ## Ports
 

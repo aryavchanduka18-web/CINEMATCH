@@ -121,10 +121,30 @@ append-only interactions log; every shown card is logged in `recommendation_logs
 tests of the spec (cold users stay cold after onboarding, 3 ratings make a user warming, dislikes
 disappear, no duplicates, every reason has at least 20% of the score, ...) all pass on the live catalog.
 
+### 6.1 After the evaluation: hosting and product additions
+
+The site is hosted on Render (one Docker service and one PostgreSQL 17 database; models delivered through the
+private database because MovieLens ratings may not be redistributed). Sharing the sparsity structure of user CF's
+derived matrices cut peak memory from 504 to 378 MB with bit-identical scores. Added afterwards, none of it
+changing the evaluated models or results (a SHA-256 fingerprint of 46 evaluation files is identical):
+- 470 missing parts of franchises already in the catalog (part D, outside the evaluation universe), shown as
+  "More from <franchise>" and studio rows such as "More from Marvel";
+- More Like This by content similarity only (content cosine plus genre, language and era terms);
+- cast and crew pages, themed collections, accounts with password rules, lockout and session revocation;
+- a recommendation-confidence measure: model agreement = 100 x (1 - 2 x the standard deviation of the
+  weighted sources' percentile ranks of the film), shown with the per-model ranks;
+- user-controlled re-ranking (Tune: MMR lambda, novelty weight, language and runtime terms; neutral = the
+  evaluated system), a "current phase" row from the last 21 days, and dislike reasons that update preferences.
+
 ## 7. Advanced modules (lab only)
 See `artifacts/lab/shilling.json`, `taste_map.json`, `ncf.json` and the Research Lab page.
 
 ## 8. Limitations
+
+- No email service: no email verification or password reset. Sign-in lockout counters live in one process's
+  memory. The free hosting plan sleeps when idle and its database expires after a month unless upgraded.
+- Model agreement measures how consistently the sources rank a film, not whether the user will like it; it has
+  not been evaluated against held-out ratings.
 - MovieLens ratings stop in October 2023; parts B, C and D rely on content and popularity until site
   users rate them.
 - Offline implicit feedback is derived from ratings (7+); live implicit feedback comes from real events.
