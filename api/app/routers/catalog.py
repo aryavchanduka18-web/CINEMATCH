@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.auth import user_id_from
 from app.db import get_db
 from app.models.catalog import normalize_sql
+from app.services import franchise as fr
 from app.services import recommender as rec
 from app.services.movies import cards, detail
 
@@ -57,6 +58,18 @@ def similar(movie_id: int, request: Request, db: Session = Depends(get_db)) -> d
         raise HTTPException(404, "Unknown movie")
     ids = [int(engine.cat.movie_ids[r]) for r in engine.similar(row)]
     return {"items": cards(db, ids, user_id_from(request, db))}
+
+
+@router.get("/movies/{movie_id}/franchise")
+def franchise(movie_id: int, request: Request, db: Session = Depends(get_db)) -> dict:
+    """More from the film's collection, its studio universe (e.g. Marvel), or fallbacks (services/franchise.py)."""
+    if not db.execute(text("SELECT 1 FROM movies WHERE id = :m"), {"m": movie_id}).first():
+        raise HTTPException(404, "Unknown movie")
+    secs = fr.sections(db, movie_id)
+    uid = user_id_from(request, db)
+    match = rec.match_for(db, uid, sorted({i for s in secs for i in s["ids"]}))
+    return {"sections": [{**{k: v for k, v in s.items() if k != "ids"}, "items": cards(db, s["ids"], uid, match)}
+                         for s in secs]}
 
 
 @router.get("/movies")

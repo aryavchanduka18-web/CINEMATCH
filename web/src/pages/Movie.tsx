@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { useFeedback, useLogEvent, useMovie, useSimilar } from "../api/hooks";
+import { useFeedback, useFranchise, useLogEvent, useMovie, useSimilar } from "../api/hooks";
 import WhyThis from "../components/explain/WhyThis";
 import ActionButtons from "../components/feedback/ActionButtons";
 import RatingDistribution from "../components/feedback/RatingDistribution";
@@ -110,7 +110,8 @@ export default function Movie() {
           )}
         </aside>
       </div>
-      {similar.data && <div className="mt-12"><Rail title="More Like This" items={similar.data.items} source="more_like_this" personal={false} /></div>}
+      <FranchiseRails id={m.id} />
+      {similar.data && <div className="mt-12"><Rail title="More Like This" subtitle="Films most similar to this one" items={similar.data.items} source="more_like_this" personal={false} /></div>}
     </div>
   );
 }
@@ -126,6 +127,22 @@ function Credits({ title, people }: { title: string; people: { id: number; name:
           {i < people.length - 1 ? ", " : ""}
         </span>
       ))}
+    </div>
+  );
+}
+/** "More from <collection>" (all parts in release order), studio universes such as Marvel, or fallbacks. */
+function FranchiseRails({ id }: { id: number }) {
+  const { data } = useFranchise(id);
+  if (!data?.sections.length) return null;
+  return (
+    <div className="mt-12 space-y-4">
+      {data.sections.map((s) => {
+        const items = s.kind === "collection" ? s.items.filter((i) => i.movie.id !== id) : s.items;
+        const at = s.items.findIndex((i) => i.movie.id === id);
+        const subtitle = s.kind === "collection" ? `Part ${at + 1} of ${s.items.length} · in release order`
+          : s.kind === "universe" ? "In release order" : s.kind === "director" ? "Newest first" : "Other franchise films with a similar feel";
+        return <Rail key={s.key} title={s.title} subtitle={subtitle} items={items} source={`franchise_${s.kind}`} personal={false} />;
+      })}
     </div>
   );
 }

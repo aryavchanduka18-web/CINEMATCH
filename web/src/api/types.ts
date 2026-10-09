@@ -74,4 +74,7 @@ export type MovieDetail = {
   user_state: UserState;
   match_pct?: number | null;
   why?: Reason[];
+  collection: { id: number; name: string } | null;
 };
+
+export type FranchiseSection = { key: string; kind: "collection" | "universe" | "director" | "franchise_like"; title: string; current?: number; items: RecItem[] };

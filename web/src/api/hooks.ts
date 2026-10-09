@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, send } from "./client";
-import type { HomePayload, Me, Mode, MovieDetail, RecItem } from "./types";
+import type { FranchiseSection, HomePayload, Me, Mode, MovieDetail, RecItem } from "./types";
 
 export const useMe = () => useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/me"), staleTime: 30_000 });
 
@@ -11,6 +11,9 @@ export const useMovie = (id: number) => useQuery({ queryKey: ["movie", id], quer
 
 export const useSimilar = (id: number) =>
   useQuery({ queryKey: ["similar", id], queryFn: () => api<{ items: RecItem[] }>(`/movies/${id}/similar`) });
+
+export const useFranchise = (id: number) =>
+  useQuery({ queryKey: ["franchise", id], queryFn: () => api<{ sections: FranchiseSection[] }>(`/movies/${id}/franchise`) });
 
 type FeedbackAction =
   | { kind: "rate"; rating: number | null }
@@ -35,7 +38,7 @@ export function useFeedback(movieId: number, source?: string) {
       }
     },
     onSettled: () => {
-      for (const key of ["home", "movie", "me", "list", "activity", "genre", "taste"]) qc.invalidateQueries({ queryKey: [key] });
+      for (const key of ["home", "movie", "me", "list", "activity", "genre", "taste", "franchise"]) qc.invalidateQueries({ queryKey: [key] });
     },
   });
 }

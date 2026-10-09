@@ -57,12 +57,14 @@ def original_gate_failures(detail: dict) -> list[str]:
 
 
 def original_gate_mask(movies: pd.DataFrame) -> np.ndarray:
-    """True for catalog films that passed the original gate. Content vocabularies are fit on these
-    films only, so films added by the relaxed gate do not change the features the models were tuned
-    and evaluated with."""
-    if "relaxed_gate" not in movies:
-        return np.ones(len(movies), dtype=bool)
-    return ~movies["relaxed_gate"].fillna(False).astype(bool).to_numpy()
+    """True for catalog films of the first build (they passed the original gate). Content vocabularies are
+    fit on these films only, so films added later, by the relaxed gate or the franchise rule, do not change
+    the features the models were tuned and evaluated with."""
+    later = np.zeros(len(movies), dtype=bool)
+    for flag in ("relaxed_gate", "franchise_rule"):
+        if flag in movies:
+            later |= movies[flag].fillna(False).astype(bool).to_numpy()
+    return ~later
 
 
 def backbone_ml_ids(catalog: pd.DataFrame) -> pd.Series:
@@ -116,6 +118,8 @@ def parse_movie(detail: dict) -> dict:
         "backdrop_path": detail.get("backdrop_path"),
         "tagline": (detail.get("tagline") or "").strip() or None,
         "studios": [c["name"] for c in detail.get("production_companies", [])],
+        "collection_id": (detail.get("belongs_to_collection") or {}).get("id"),
+        "collection_name": (detail.get("belongs_to_collection") or {}).get("name"),
         "logo_path": english_logo(detail),
         "tmdb_vote_count": detail.get("vote_count"),
         "status": detail.get("status"),

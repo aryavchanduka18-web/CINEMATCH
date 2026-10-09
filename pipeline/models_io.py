@@ -31,18 +31,34 @@ def content_features() -> tuple[sp.csr_matrix, np.ndarray, np.ndarray]:
     """Tuned content features for the WHOLE product catalog (rows follow movies_clean order), and the
     columns learned from the original-gate films (vocabularies come from those films only, see
     original_gate_mask; labels seen only in films added later sit in extra columns)."""
+    x, tmdb, feats, _ = content_layout()
+    return x, tmdb, feats.fit_columns()
+
+
+def catalog_stage(movies: pd.DataFrame) -> np.ndarray:
+    """When a film joined the catalog: 0 first build, 1 relaxed metadata gate, 2 franchise rule."""
+    stage = np.zeros(len(movies), dtype=int)
+    for k, flag in ((1, "relaxed_gate"), (2, "franchise_rule")):
+        if flag in movies:
+            stage[movies[flag].fillna(False).astype(bool).to_numpy()] = k
+    return stage
+
+
+def content_layout():
+    """content_features() plus the ContentFeatures (column layout per stage) and each film's stage."""
     s = settings("content")
     movies = pd.read_parquet(PROCESSED / "movies_clean.parquet")
     credits = pd.read_parquet(PROCESSED / "credits_clean.parquet")
-    feats = combine(build_blocks(movies, credits, ngram_max=s["ngram_max"], fit_mask=original_gate_mask(movies)),
-                    s["block_weights"])
+    stage = catalog_stage(movies)
+    feats = combine(build_blocks(movies, credits, ngram_max=s["ngram_max"], fit_mask=original_gate_mask(movies),
+                                 stage=stage), s["block_weights"])
     x = feats.matrix
     if s.get("thin_text_scale", 1.0) != 1.0:
         from importlib import import_module
         apply_thin = import_module("pipeline.09_train_models").apply_thin
         lo, hi = feats.block_columns["text"]
         x = apply_thin(x, movies["thin_text"].to_numpy(), lo, hi, s["thin_text_scale"])
-    return x, movies["tmdb_id"].to_numpy(), feats.fit_columns()
+    return x, movies["tmdb_id"].to_numpy(), feats, stage
 
 
 def content_matrix() -> tuple[sp.csr_matrix, np.ndarray]:
