@@ -1,3 +1,5 @@
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { useEffect, useState, type ReactNode } from "react";
 import { useFeedback } from "../../api/hooks";
 import type { UserState } from "../../api/types";
 import { useUI } from "../layout/ui";
@@ -17,7 +19,8 @@ const Icon = {
   ),
   list: (on: boolean) => (
     <svg viewBox="0 0 24 24" className="h-[1.1em] w-[1.1em]" fill="none" stroke="currentColor" strokeWidth="1.9">
-      {on ? <path d="m5 12 4.5 4.5L19 7" /> : <path d="M12 5v14M5 12h14" />}
+      {on ? <motion.path d="m5 12 4.5 4.5L19 7" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.3 }} />
+        : <path d="M12 5v14M5 12h14" />}
     </svg>
   ),
   watched: (on: boolean) => (
@@ -28,59 +31,96 @@ const Icon = {
   ),
 };
 
-export default function ActionButtons({ movieId, state, source, size = "sm", showWatched = false }: Props) {
+/** One round action button. Turning it on gives a short pop of the icon, plus a small burst of dots for
+ *  Like; anyone whose system asks for reduced motion gets none of it. */
+function ActionButton({ on, label, title, onClick, burst, size, children }: {
+  on: boolean; label: string; title: string; onClick: () => void; burst?: boolean; size: "sm" | "md"; children: ReactNode;
+}) {
+  const reduce = useReducedMotion();
+  const [fired, setFired] = useState(0);
+  const cls = `relative grid place-items-center rounded-full border transition-colors duration-150 ${
+    size === "sm" ? "h-8 w-8 text-sm" : "h-11 w-11 text-base"
+  } ${on ? "border-white bg-white text-black" : "border-white/30 bg-black/40 text-white hover:border-white"}`;
+  return (
+    <motion.button
+      className={cls}
+      aria-pressed={on}
+      aria-label={label}
+      title={title}
+      whileTap={reduce ? undefined : { scale: 0.85 }}
+      onClick={() => {
+        if (!on) setFired((n) => n + 1);
+        onClick();
+      }}
+    >
+      <motion.span key={fired} className="grid place-items-center"
+        initial={reduce || !fired ? false : { scale: 1.45 }} animate={{ scale: 1 }}
+        transition={{ type: "spring", stiffness: 500, damping: 14 }}>
+        {children}
+      </motion.span>
+      <AnimatePresence>
+        {burst && fired > 0 && !reduce && on && (
+          <span key={fired} className="pointer-events-none absolute inset-0" aria-hidden>
+            {Array.from({ length: 8 }, (_, i) => {
+              const a = (i / 8) * Math.PI * 2;
+              return (
+                <motion.span key={i} className="absolute left-1/2 top-1/2 -ml-[3px] -mt-[3px] h-1.5 w-1.5 rounded-full bg-accent"
+                  initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+                  animate={{ x: Math.cos(a) * 22, y: Math.sin(a) * 22, opacity: 0, scale: 0.4 }}
+                  transition={{ duration: 0.5, ease: "easeOut" }} />
+              );
+            })}
+          </span>
+        )}
+      </AnimatePresence>
+    </motion.button>
+  );
+}
+
+export default function ActionButtons({ movieId, state: server, source, size = "sm", showWatched = false }: Props) {
   const fb = useFeedback(movieId, source);
   const { notify, askDislikeReason } = useUI();
-  const cls = `grid place-items-center rounded-full border transition-colors duration-150 ${
-    size === "sm" ? "h-8 w-8 text-sm" : "h-11 w-11 text-base"
-  }`;
-  const off = "border-white/30 bg-black/40 text-white hover:border-white";
-  const on = "border-white bg-white text-black";
+  // Optimistic: the button changes on click; the server's answer replaces it when the lists refresh.
+  const [state, setState] = useState(server);
+  useEffect(() => setState(server), [server.in_list, server.reaction, server.watched, server.rating]);
   return (
     <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-      <button
-        className={`${cls} ${state.in_list ? on : off}`}
-        aria-pressed={state.in_list}
-        aria-label={state.in_list ? "Remove from My List" : "Add to My List"}
+      <ActionButton size={size} on={state.in_list} label={state.in_list ? "Remove from My List" : "Add to My List"}
         title={state.in_list ? "Remove from My List" : "Add to My List"}
         onClick={() => {
+          setState({ ...state, in_list: !state.in_list });
           fb.mutate({ kind: "list", on: !state.in_list });
           notify(state.in_list ? "Removed from My List" : "Added to My List");
-        }}
-      >
+        }}>
         {Icon.list(state.in_list)}
-      </button>
-      <button
-        className={`${cls} ${state.reaction === 1 ? on : off}`}
-        aria-pressed={state.reaction === 1}
-        aria-label="Like"
-        title="Like"
-        onClick={() => fb.mutate({ kind: "react", value: state.reaction === 1 ? 0 : 1 })}
-      >
-        {Icon.like(state.reaction === 1)}
-      </button>
-      <button
-        className={`${cls} ${state.reaction === -1 ? on : off}`}
-        aria-pressed={state.reaction === -1}
-        aria-label="Dislike"
-        title="Not for me"
+      </ActionButton>
+      <ActionButton size={size} burst on={state.reaction === 1} label="Like" title="Like"
         onClick={() => {
+          setState({ ...state, reaction: state.reaction === 1 ? 0 : 1 });
+          fb.mutate({ kind: "react", value: state.reaction === 1 ? 0 : 1 });
+          notify(state.reaction === 1 ? "Like removed" : "Liked. Your picks will lean this way.");
+        }}>
+        {Icon.like(state.reaction === 1)}
+      </ActionButton>
+      <ActionButton size={size} on={state.reaction === -1} label="Dislike" title="Not for me"
+        onClick={() => {
+          setState({ ...state, reaction: state.reaction === -1 ? 0 : -1 });
           fb.mutate({ kind: "react", value: state.reaction === -1 ? 0 : -1 });
-          if (state.reaction !== -1) askDislikeReason(movieId);
-        }}
-      >
+          if (state.reaction === -1) notify("Dislike removed");
+          else askDislikeReason(movieId);           // the sheet asks why, then confirms
+        }}>
         {Icon.dislike(state.reaction === -1)}
-      </button>
+      </ActionButton>
       {showWatched && (
-        <button
-          className={`${cls} ${state.watched ? on : off}`}
-          aria-pressed={state.watched}
-          aria-label={state.watched ? "Unmark watched" : "Mark watched"}
+        <ActionButton size={size} on={state.watched} label={state.watched ? "Unmark watched" : "Mark watched"}
           title={state.watched ? "Watched" : "Mark watched"}
-          onClick={() => fb.mutate({ kind: "watched", on: !state.watched })}
-        >
+          onClick={() => {
+            setState({ ...state, watched: !state.watched });
+            fb.mutate({ kind: "watched", on: !state.watched });
+            notify(state.watched ? "Unmarked as watched" : "Marked as watched");
+          }}>
           {Icon.watched(state.watched)}
-        </button>
+        </ActionButton>
       )}
     </div>
   );
