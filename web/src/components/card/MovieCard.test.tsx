@@ -24,7 +24,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function setup() {
+async function setup() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const view = render(
     <QueryClientProvider client={client}>
@@ -39,19 +39,22 @@ function setup() {
   );
   const card = screen.getByRole("button", { name: "Test Film (2017)" }).parentElement!;
   fireEvent.mouseEnter(card);
-  act(() => vi.advanceTimersByTime(300));
+  // Opens after the hover-intent delay, once the details are loaded (or after the longest wait).
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(700);
+  });
   return { view, card };
 }
 
-test("the hover details render outside the rail, so the rail cannot clip them", () => {
-  setup();
+test("the hover details render outside the rail, so the rail cannot clip them", async () => {
+  await setup();
   const details = screen.getByTestId("hover-details");
   expect(screen.getByTestId("rail")).not.toContainElement(details);
   expect(document.body).toContainElement(details);
 });
 
-test("the mouse wheel over the card or its details scrolls only the details", () => {
-  const { card } = setup();
+test("the mouse wheel over the card or its details scrolls only the details", async () => {
+  const { card } = await setup();
   const details = screen.getByTestId("hover-details");
   const body = screen.getByLabelText("Test Film details");
   for (const target of [details, card]) {
@@ -60,4 +63,11 @@ test("the mouse wheel over the card or its details scrolls only the details", ()
     expect(wheel.defaultPrevented).toBe(true);        // the page and the rail do not move
   }
   expect(body.scrollTop).toBe(80);
+});
+
+test("the details open once, at their final size: the film details are loaded before the panel shows", async () => {
+  await setup();
+  expect(globalThis.fetch).toHaveBeenCalledWith("/api/movies/7", expect.anything());
+  expect(screen.getByTestId("hover-details")).toBeInTheDocument();
+  expect(screen.queryByText("Loading", { exact: false })).not.toBeInTheDocument();
 });
