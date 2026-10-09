@@ -6,6 +6,8 @@ import NavBar from "./NavBar";
 import { useUI } from "./ui";
 import QuickViewPanel from "../card/QuickViewPanel";
 import GuestBanner from "../account/GuestBanner";
+import WhyPanel from "../explain/WhyPanel";
+import DislikeReasonSheet from "../feedback/DislikeReasonSheet";
 
 export default function AppShell() {
   const { toast } = useUI();
@@ -13,12 +15,14 @@ export default function AppShell() {
     <div className="min-h-screen bg-bg text-ink">
       <NavBar />
       <GuestBanner />
-      <main>
+      <main className="pb-20 md:pb-0">
         <Outlet />
       </main>
       <Footer />
       <MobileTabBar />
       <QuickViewPanel />
+      <WhyPanel />
+      <DislikeReasonSheet />
       <AnimatePresence>
         {toast && (
           <motion.div

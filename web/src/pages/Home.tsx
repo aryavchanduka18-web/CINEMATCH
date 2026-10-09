@@ -4,6 +4,7 @@ import { useCollections, useHome, useMe, useSetMode } from "../api/hooks";
 import type { Mode } from "../api/types";
 import DiscoveryModeControl from "../components/discovery/DiscoveryModeControl";
 import TonightPanel from "../components/discovery/TonightPanel";
+import TunePanel from "../components/discovery/TunePanel";
 import Hero from "../components/hero/Hero";
 import { PageMessage, RailSkeleton } from "../components/Loading";
 import Rail from "../components/rail/Rail";
@@ -16,6 +17,7 @@ export default function Home() {
   const home = useHome(mode);
   const saveMode = useSetMode();
   const [tonight, setTonight] = useState(false);
+  const [tune, setTune] = useState(false);
   const collections = useCollections();
 
   if (me.data && !me.data.onboarded) return <Navigate to="/onboarding" replace />;
@@ -33,21 +35,34 @@ export default function Home() {
               saveMode.mutate(m);
             }}
           />
-          <button onClick={() => setTonight((t) => !t)} aria-expanded={tonight}
+          <button onClick={() => setTune((t) => !t)} aria-expanded={tune}
             className="rounded-full border border-white/20 px-4 py-2 text-sm hover:border-white/50">
-            For Tonight
+            Tune
           </button>
           <Link to="/discover" className="text-sm text-muted hover:text-white">Browse everything →</Link>
         </div>
-        {tonight && (
+        {tune && (
           <div className="px-4 pb-6 md:px-10">
-            <TonightPanel />
+            <TunePanel onClose={() => setTune(false)} />
           </div>
         )}
+        <div className="px-4 pb-4 md:px-10">
+          {tonight ? <TonightPanel /> : (
+            <button onClick={() => setTonight(true)}
+              className="group flex w-full items-center justify-between gap-4 rounded-2xl border border-white/10 bg-gradient-to-r from-accent/25 via-surface to-surface px-5 py-5 text-left transition-colors hover:border-white/30 md:px-7">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">For Tonight</p>
+                <p className="mt-1 font-display text-xl font-bold md:text-2xl">Not sure what to watch? Tell us your mood.</p>
+                <p className="mt-1 text-sm text-muted">Mood, time and language in, the best matches out, with the reasons.</p>
+              </div>
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white text-black transition-transform group-hover:translate-x-1">→</span>
+            </button>
+          )}
+        </div>
         {home.isLoading && [0, 1, 2].map((i) => <RailSkeleton key={i} />)}
         <div className="space-y-6">
           {home.data?.rails.map((r) => (
-            <Rail key={r.key} title={r.title} items={r.items} source={`rail:${r.key.split(":")[0]}`}
+            <Rail key={r.key} title={r.title} subtitle={r.subtitle ?? undefined} items={r.items} source={`rail:${r.key.split(":")[0]}`}
               personal={PERSONAL.has(r.key) || r.items.some((i) => i.match_pct != null)} />
           ))}
           {home.data && collections.data?.collections.map((c) => (

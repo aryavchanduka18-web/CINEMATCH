@@ -24,9 +24,10 @@ export type RecItem = {
   match_pct: number | null;
   reasons: Reason[];
   user_state: UserState;
+  agreement?: number | null;
 };
 
-export type Rail = { key: string; title: string; source: string; items: RecItem[] };
+export type Rail = { key: string; title: string; subtitle?: string | null; source: string; items: RecItem[] };
 
 export type HomePayload = { stage: string; mode: Mode; hero: RecItem[]; rails: Rail[]; page_id: string };
 
@@ -75,6 +76,7 @@ export type MovieDetail = {
   match_pct?: number | null;
   why?: Reason[];
   collection: { id: number; name: string } | null;
+  confidence?: import("../components/explain/ConfidenceCard").Confidence;
 };
 
 export type FranchiseSection = { key: string; kind: "collection" | "universe" | "director" | "franchise_like"; title: string; current?: number; items: RecItem[] };

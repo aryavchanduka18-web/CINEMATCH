@@ -21,6 +21,25 @@ from cinematch_engine.surprise import REASON as SURPRISE_REASON
 from cinematch_engine.tonight import Request, recommend as tonight_recommend
 
 POPCORN_GENRES = {"Action", "Adventure", "Comedy", "Animation", "Science Fiction"}
+# "Indian and English" end of the International tuning slider.
+LOCAL_LANGUAGES = {"en", "hi", "ta", "te", "ml", "kn", "bn", "mr"}
+
+
+@dataclass
+class Tuning:
+    """The user's Tune sliders, 0-100 with 50 neutral. Live re-ranking only (MMR and its extra term);
+    all at 50 leaves every recommendation exactly as without tuning."""
+    adventurous: int = 50     # MMR lambda: lower = more diverse lists
+    hidden: int = 50          # novelty weight beta: higher = less popular films
+    international: int = 50   # boost for films outside English and the Indian languages (or for them, below 50)
+    length: int = 50          # soft runtime preference: above 50 longer films, below 50 shorter ones
+
+    def shift(self, name: str) -> float:
+        return (min(max(getattr(self, name), 0), 100) - 50) / 50
+
+    @property
+    def neutral(self) -> bool:
+        return all(self.shift(n) == 0 for n in ("adventurous", "hidden", "international", "length"))
 EXCLUDED_AWARDS = ("Golden Raspberry",)
 LANGUAGE_NAMES = {"en": "English", "hi": "Hindi", "ta": "Tamil", "te": "Telugu", "ml": "Malayalam",
                   "kn": "Kannada", "bn": "Bengali", "mr": "Marathi", "ko": "Korean", "ja": "Japanese",
@@ -156,7 +175,8 @@ class OnlineEngine:
         outside = np.array([r for r in range(self.cat.n) if not liked & set(self.cat.genres[r])], dtype=np.int64)
         return outside if self.cat.n - len(outside) >= 200 else np.array([], dtype=np.int64)
 
-    def top_picks(self, st: UserState, mode: str = "balanced", k: int = 20, extra_exclude=(), scores=None):
+    def top_picks(self, st: UserState, mode: str = "balanced", k: int = 20, extra_exclude=(), scores=None,
+                  tuning: "Tuning | None" = None):
         scores = scores or self.scores(st)
         excl = np.union1d(self.excluded(st), np.asarray(list(extra_exclude), dtype=np.int64))
         excl = np.union1d(excl, self.onboarding_constraint(st))
@@ -173,7 +193,12 @@ class OnlineEngine:
         sim = (x @ x.T).toarray().astype(np.float32)
         boost = self._explore_boost(st, items) if mode == "discover" else None
         cfg = MODES[mode]
-        local = mmr(np.arange(len(items)), rel, sim, self.cat.novelty[items], k, cfg["lambda"], cfg["beta"], boost)
+        lam, beta = cfg["lambda"], cfg["beta"]
+        if tuning is not None and not tuning.neutral:
+            lam = float(np.clip(lam - 0.2 * tuning.shift("adventurous"), 0.3, 0.98))
+            beta = max(0.0, beta + 0.15 * tuning.shift("hidden"))
+            boost = (boost if boost is not None else 0) + self._tuning_boost(items, tuning)
+        local = mmr(np.arange(len(items)), rel, sim, self.cat.novelty[items], k, lam, beta, boost)
         picked = items[local]
         shares = contributions(norm[:, :TOP_N][:, local], w)
         blend_rank = {int(i): j for j, i in enumerate(items)}
@@ -186,6 +211,41 @@ class OnlineEngine:
 
     def match(self, stage: str, score: float) -> int:
         return int(self.cal.match_pct(stage, np.array([score]))[0])
+
+    def _tuning_boost(self, items: np.ndarray, tuning: Tuning) -> np.ndarray:
+        """International: +/-0.08 for films outside / inside English and the Indian languages. Length: up to
+        +/-0.05 by runtime (110 minutes is neutral, 40 minutes either way is the full effect)."""
+        cat = self.cat
+        intl = np.array([0 if cat.language[r] in LOCAL_LANGUAGES else 1 for r in items], dtype=np.float32)
+        rt = np.nan_to_num(cat.runtime[items], nan=110.0)
+        z = np.clip((rt - 110.0) / 40.0, -1, 1).astype(np.float32)
+        return (0.08 * tuning.shift("international") * (2 * intl - 1) + 0.05 * tuning.shift("length") * z).astype(np.float32)
+
+    def phase(self, st: UserState, recent_rows: list[int], k: int = 20, scores=None) -> dict | None:
+        """Your Current Phase: films like the ones liked in the last weeks (recent_rows, newest first).
+        Score = 0.6 x percentile of content similarity to those films + 0.4 x percentile of the usual hybrid
+        score, so recent taste counts more than the whole history. None with fewer than 3 recent films."""
+        recent = list(dict.fromkeys(recent_rows))
+        if len(recent) < 3:
+            return None
+        cat = self.cat
+        profile = sp.csr_matrix(cat.content[recent].mean(axis=0))
+        sims = np.asarray((cat.content @ profile.T).todense()).ravel()
+        rail = self.rail_scores(st, scores)
+        ok = np.isfinite(rail)
+        ok[self.excluded(st)] = False
+        ok[recent] = False
+        idx = np.nonzero(ok)[0]
+        if len(idx) < k:
+            return None
+        pct = lambda v: (np.argsort(np.argsort(v)) + 1) / len(v)
+        combined = 0.6 * pct(sims[idx]) + 0.4 * pct(rail[idx])
+        counts: dict[str, int] = {}
+        for r in recent:
+            for g in cat.genres[r]:
+                counts[g] = counts.get(g, 0) + 1
+        genre = max(counts, key=lambda g: (counts[g], -min(i for i, r in enumerate(recent) if g in cat.genres[r]))) if counts else None
+        return {"rows": idx[np.argsort(-combined)][:k].tolist(), "genre": genre, "based_on": len(recent)}
 
     def _explore_boost(self, st: UserState, items: np.ndarray) -> np.ndarray:
         """Discover mode: small boost for other languages and for genres rare in the user's history."""
@@ -276,12 +336,13 @@ class OnlineEngine:
         return max(counts, key=counts.get) if counts else None
 
     # ------------------------------------------------------------------ home page plan (spec 7)
-    def home(self, st: UserState, mode: str = "balanced", rail_size: int = 20, min_rail: int = 8) -> dict:
+    def home(self, st: UserState, mode: str = "balanced", rail_size: int = 20, min_rail: int = 8,
+             tuning: Tuning | None = None, recent_rows: list[int] | None = None) -> dict:
         cat = self.cat
         scores = self.scores(st)
         rail = self.rail_scores(st, scores)
         used: set[int] = set()
-        picks = self.top_picks(st, mode, k=5 + rail_size, scores=scores)
+        picks = self.top_picks(st, mode, k=5 + rail_size, scores=scores, tuning=tuning)
         hero = picks[:5]
         used |= {p["row"] for p in hero}
         rails = []
@@ -300,6 +361,12 @@ class OnlineEngine:
 
         tp = [p for p in picks[5:] if p["row"] not in used]
         take("top_picks", "Top Picks For You", [p["row"] for p in tp], "hybrid", scored={p["row"]: p for p in tp})
+
+        ph = self.phase(st, recent_rows or [], k=60, scores=scores)
+        if ph:
+            take("current_phase", "Your Current Phase", ph["rows"], "recent_content",
+                 reason={"code": "current_phase", "source": "recent_content", "share": 0, "genre": ph["genre"],
+                         "text": "Close to the films you liked in the last three weeks"})
 
         anchors = [r for r in self._recent_likes(st)][:2]
         for a in anchors:
@@ -351,7 +418,7 @@ class OnlineEngine:
         loved = np.nonzero(in_lang)[0] if in_lang.any() else np.arange(cat.n)
         loved = loved[np.argsort(-cat.popularity[loved])]
         take("most_loved", "Most Loved", [r for r in loved if np.isfinite(rail[r])], "popularity")
-        disc = self.top_picks(st, "discover", k=rail_size + len(used), scores=scores, extra_exclude=used)
+        disc = self.top_picks(st, "discover", k=rail_size + len(used), scores=scores, extra_exclude=used, tuning=tuning)
         take("different", "Discover Something Different", [p["row"] for p in disc], "discover_mmr",
              scored={p["row"]: p for p in disc})
         return {"stage": st.stage, "hero": hero, "rails": rails, "rail_scores": rail}

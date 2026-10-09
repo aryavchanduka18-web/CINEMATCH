@@ -68,6 +68,7 @@ def cards(db: Session, ids: list[int], user_id: int | None = None, extra: dict[i
                       "dominant_color": r["dominant_color"], "overview_short": short(r["overview"]),
                       "catalog_part": r["catalog_part"]},
             "score": e.get("score"), "match_pct": e.get("match_pct"), "reasons": e.get("reasons", []),
+            "agreement": e.get("agreement"),
             "user_state": states[i],
         })
     return out

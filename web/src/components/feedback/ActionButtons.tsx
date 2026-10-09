@@ -79,7 +79,7 @@ function ActionButton({ on, label, title, onClick, burst, size, children }: {
 
 export default function ActionButtons({ movieId, state: server, source, size = "sm", showWatched = false }: Props) {
   const fb = useFeedback(movieId, source);
-  const { notify } = useUI();
+  const { notify, askDislikeReason } = useUI();
   // Optimistic: the button changes on click; the server's answer replaces it when the lists refresh.
   const [state, setState] = useState(server);
   useEffect(() => setState(server), [server.in_list, server.reaction, server.watched, server.rating]);
@@ -106,7 +106,8 @@ export default function ActionButtons({ movieId, state: server, source, size = "
         onClick={() => {
           setState({ ...state, reaction: state.reaction === -1 ? 0 : -1 });
           fb.mutate({ kind: "react", value: state.reaction === -1 ? 0 : -1 });
-          notify(state.reaction === -1 ? "Dislike removed" : "Got it. We won't show this again.");
+          if (state.reaction === -1) notify("Dislike removed");
+          else askDislikeReason(movieId);           // the sheet asks why, then confirms
         }}>
         {Icon.dislike(state.reaction === -1)}
       </ActionButton>

@@ -6,8 +6,19 @@ import SurpriseMeButton from "../components/discovery/SurpriseMeButton";
 import TonightPanel from "../components/discovery/TonightPanel";
 import { LANGUAGES } from "../lib/format";
 
+// [value, label, what it does]; the first four are ranked by the recommender (GET /movies, personal_order).
+const SORTS: [string, string, string][] = [
+  ["recommended", "Recommended for you", "your match, re-ranked with your Tune settings"],
+  ["match", "Highest match", "pure predicted match"],
+  ["hidden", "Hidden gems", "high match, less well known"],
+  ["novel", "Most novel", "genres you have not liked yet come first"],
+  ["popular", "Most popular", "most voted on TMDB"],
+  ["rating", "Highest rated", "community rating"],
+  ["newest", "Newest", "latest releases first"],
+];
+
 export default function Discover() {
-  const [f, setF] = useState({ genre: "", lang: "", decade: "", runtime: "", min_rating: "", sort: "popular" });
+  const [f, setF] = useState({ genre: "", lang: "", decade: "", runtime: "", min_rating: "", sort: "recommended" });
   const [total, setTotal] = useState<number | null>(null);
   const genres = useQuery({ queryKey: ["genres"], queryFn: () => api<{ genres: { slug: string; name: string }[] }>("/genres") });
   const qs = new URLSearchParams(Object.entries(f).filter(([, v]) => v) as [string, string][]);
@@ -40,13 +51,15 @@ export default function Discover() {
           <option value="">Any rating</option>{[6, 7, 7.5, 8].map((r) => <option key={r} value={r}>{r}+</option>)}
         </select>
         <select className={sel} value={f.sort} onChange={set("sort")} aria-label="Sort">
-          <option value="popular">Most popular</option><option value="rating">Highest rated</option><option value="newest">Newest</option><option value="title">Title</option>
+          {SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
       </div>
-      <p className="mt-4 text-sm text-muted">{total != null ? `${total.toLocaleString()} films` : "Loading…"}</p>
+      <p className="mt-4 text-sm text-muted">
+        {total != null ? `${total.toLocaleString()} films` : "Loading…"} · {SORTS.find(([v]) => v === f.sort)?.[2]}
+      </p>
       <div className="mt-6">
         <PagedGrid queryKey={["discover", qs.toString()]} path={(p) => `/movies?${qs}${qs.toString() ? "&" : ""}page=${p}`}
-          source="discover" personal={false} onTotal={setTotal} />
+          source="discover" personal={["recommended", "match", "hidden", "novel"].includes(f.sort)} onTotal={setTotal} />
       </div>
     </div>
   );

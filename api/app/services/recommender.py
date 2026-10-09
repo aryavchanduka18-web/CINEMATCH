@@ -18,7 +18,7 @@ from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from cinematch_engine.online import Catalog, OnlineEngine, UserState
+from cinematch_engine.online import Catalog, OnlineEngine, Tuning, UserState
 from cinematch_engine.profile import BEHAVIORAL_EVENTS
 from cinematch_engine.sources import SourceModels
 
@@ -133,3 +133,22 @@ def match_for(db: Session, user_id: int | None, movie_ids: list[int]) -> dict[in
         if row is not None and np.isfinite(scores[row]):
             out[mid] = {"score": float(scores[row]), "match_pct": engine.match(st.stage, float(scores[row]))}
     return out
+
+
+TUNING_KEYS = ("adventurous", "hidden", "international", "length")
+PHASE_DAYS = 21
+
+
+def user_tuning(db: Session, user_id: int) -> Tuning:
+    raw = db.execute(text("SELECT tuning FROM user_preferences WHERE user_id = :u"), {"u": user_id}).scalar() or {}
+    return Tuning(**{k: int(raw[k]) for k in TUNING_KEYS if k in raw})
+
+
+def recent_positive_rows(db: Session, user_id: int, engine: OnlineEngine) -> list[int]:
+    """Films liked, rated 7+, saved or marked watched in the last PHASE_DAYS days, newest first."""
+    rows = db.execute(text(f"""SELECT movie_id FROM interactions WHERE user_id = :u AND movie_id IS NOT NULL
+        AND created_at >= now() - interval '{PHASE_DAYS} days'
+        AND (event_type IN ('like', 'list_add', 'watched') OR (event_type = 'rate' AND value >= 7))
+        ORDER BY created_at DESC"""), {"u": user_id}).scalars().all()
+    row_of = engine.cat.row_of
+    return list(dict.fromkeys(row_of[m] for m in rows if m in row_of))

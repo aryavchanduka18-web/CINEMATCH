@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.auth import current_user
 from app.db import get_db
 from app.services import recommender as rec
+from app.services.confidence import agreement_all, confidence
 from app.services.movies import cards
 from cinematch_engine.tonight import Request as TonightRequest
 
@@ -43,16 +44,21 @@ def home(mode: str | None = None, user=Depends(current_user), db: Session = Depe
     uid = user["id"]
     mode = mode_of(db, uid, mode)
     st = rec.user_state(db, uid, engine)
-    plan = engine.home(st, mode)
+    plan = engine.home(st, mode, tuning=rec.user_tuning(db, uid), recent_rows=rec.recent_positive_rows(db, uid, engine))
     cat = engine.cat
+    agree = agreement_all(engine, st, engine.scores(st))
     request_id, page_id = str(uuid.uuid4()), str(uuid.uuid4())
+
+    def agreement(row):
+        return None if np.isnan(agree[row]) else int(agree[row])
 
     def scored_items(entries):
         extra = {}
         for e in entries:
             mid = int(cat.movie_ids[e["row"]])
             extra[mid] = {"score": e["score"], "match_pct": e["match_pct"], "components": e["shares"],
-                          "reasons": engine.reasons(st, e["row"], e["shares"], e.get("reranked", False))}
+                          "reasons": engine.reasons(st, e["row"], e["shares"], e.get("reranked", False)),
+                          "agreement": agreement(e["row"])}
         return cards(db, list(extra), uid, extra)
 
     hero = scored_items(plan["hero"])
@@ -65,9 +71,14 @@ def home(mode: str | None = None, user=Depends(current_user), db: Session = Depe
             for row in r["rows"]:
                 s = float(plan["rail_scores"][row])
                 extra[int(cat.movie_ids[row])] = {"score": s, "match_pct": engine.match(st.stage, s) if np.isfinite(s) else None,
-                                                  "reasons": [r["reason"]] if r.get("reason") else []}
+                                                  "reasons": [r["reason"]] if r.get("reason") else [],
+                                                  "agreement": agreement(row)}
             items = cards(db, list(extra), uid, extra)
-        rails.append({"key": r["key"], "title": r["title"], "source": r["source"], "items": items})
+        subtitle = None
+        if r["key"] == "current_phase" and r["reason"].get("genre"):
+            subtitle = (f"You've been into {r['reason']['genre'].lower()} films lately. "
+                        "Recent likes, ratings and saves count more here than your older history.")
+        rails.append({"key": r["key"], "title": r["title"], "subtitle": subtitle, "source": r["source"], "items": items})
         log_shown(db, uid, request_id, page_id, r["key"], mode, items)
     log_shown(db, uid, request_id, page_id, "hero", mode, hero)
     db.commit()
@@ -126,4 +137,5 @@ def explain(movie_id: int, user=Depends(current_user), db: Session = Depends(get
     return {"movie_id": movie_id, "stage": st.stage, "behavioral_count": st.behavioral_count,
             "onboarding_count": len(st.picks), "shares": shares,
             "match_pct": engine.match(st.stage, s) if np.isfinite(s) else None,
-            "reasons": engine.reasons(st, row, shares), "weights": engine.weights[st.stage]}
+            "reasons": engine.reasons(st, row, shares), "weights": engine.weights[st.stage],
+            "confidence": confidence(engine, st, row, engine.match(st.stage, s) if np.isfinite(s) else None)}

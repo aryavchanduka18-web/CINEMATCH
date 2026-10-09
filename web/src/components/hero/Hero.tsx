@@ -6,12 +6,15 @@ import { useLogEvent } from "../../api/hooks";
 import { languageName, runtime } from "../../lib/format";
 import { tmdbImage } from "../../lib/tmdb";
 import ActionButtons from "../feedback/ActionButtons";
+import { agreementLabel } from "../../lib/confidence";
+import { useUI } from "../layout/ui";
 
 /** Top 5 picks, rotating. Blurred artwork + a subtle tint from the precomputed dominant color.
  *  No Play button: CineMatch recommends, it does not stream (spec 8.5). */
 export default function Hero({ items }: { items: RecItem[] }) {
   const [i, setI] = useState(0);
   const logEvent = useLogEvent();
+  const { openWhy } = useUI();
   // On scroll the hero compresses: the artwork drifts and dims, the text lifts (spec 8.5).
   const { scrollY } = useScroll();
   const artY = useTransform(scrollY, [0, 600], [0, 120]);
@@ -47,13 +50,24 @@ export default function Hero({ items }: { items: RecItem[] }) {
             )}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-white/85">
               {item.match_pct != null && <span className="font-semibold text-accent">{item.match_pct}% match</span>}
+              {item.match_pct != null && agreementLabel(item.agreement) && (
+                <span className="rounded border border-white/25 px-1.5 text-xs">{agreementLabel(item.agreement)} model agreement</span>
+              )}
               {m.community_rating != null && <span>★ {m.community_rating.toFixed(1)}</span>}
               {m.year && <span>{m.year}</span>}
               {m.runtime && <span>{runtime(m.runtime)}</span>}
               <span>{languageName(m.language)}</span>
               <span>{m.genres.slice(0, 3).join(" · ")}</span>
             </div>
-            {item.reasons[0] && <p className="mt-3 text-base text-white/90">{item.reasons[0].text}</p>}
+            {item.reasons[0] && (
+              <p className="mt-3 flex flex-wrap items-center gap-3 text-base text-white/90">
+                {item.reasons[0].text}
+                {item.match_pct != null && (
+                  <button onClick={() => openWhy(m.id)}
+                    className="rounded-full border border-white/30 bg-black/30 px-3 py-0.5 text-sm backdrop-blur hover:border-white">Why?</button>
+                )}
+              </p>
+            )}
             {m.overview_short && <p className="mt-2 line-clamp-2 max-w-xl text-sm text-white/70">{m.overview_short}</p>}
             <div className="mt-6 flex items-center gap-3">
               <Link to={`/movie/${m.id}`} state={{ source: "hero", position: i }} onClick={() => logEvent("hero_view", m.id, "hero", i)}

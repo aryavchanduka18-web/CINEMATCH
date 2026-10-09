@@ -8,7 +8,7 @@ from datetime import datetime
 from sqlalchemy import (
     Boolean, CheckConstraint, DateTime, ForeignKey, Integer, SmallInteger, Text, func, text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, CITEXT
+from sqlalchemy.dialects.postgresql import ARRAY, CITEXT, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -53,6 +53,8 @@ class UserPreferences(Base):
     languages: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
     liked_genre_ids: Mapped[list[int] | None] = mapped_column(ARRAY(Integer))
     disliked_genre_ids: Mapped[list[int] | None] = mapped_column(ARRAY(Integer))
+    # Tune sliders {adventurous, hidden, international, length}, 0-100, 50 = neutral (engine Tuning).
+    tuning: Mapped[dict | None] = mapped_column(JSONB)
     discovery_mode: Mapped[str] = mapped_column(Text, server_default="balanced", nullable=False)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
