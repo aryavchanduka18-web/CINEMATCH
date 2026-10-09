@@ -10,6 +10,7 @@ import Lab from "./pages/Lab";
 import Movie from "./pages/Movie";
 import MyList from "./pages/MyList";
 import Onboarding from "./pages/Onboarding";
+import Person from "./pages/Person";
 import Search from "./pages/Search";
 import { PageMessage } from "./components/Loading";
 
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="/genres" element={<Genres />} />
         <Route path="/genres/:slug" element={<Genre />} />
         <Route path="/movie/:id" element={<Movie />} />
+        <Route path="/person/:id" element={<Person />} />
         <Route path="/my-list" element={<MyList />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/search" element={<Search />} />

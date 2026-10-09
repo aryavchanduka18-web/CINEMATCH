@@ -69,13 +69,14 @@ export default function Movie() {
             <h3 className="mb-3 text-sm font-semibold text-muted">Cast</h3>
             <div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">
               {m.cast.map((c) => (
-                <div key={c.id} className="w-24 shrink-0 text-center">
-                  <div className="mx-auto h-24 w-24 overflow-hidden rounded-full bg-surface-2">
-                    {c.profile_path && <img src={tmdbImage(c.profile_path, "w300")} alt="" loading="lazy" className="h-full w-full object-cover" />}
+                <Link key={c.id} to={`/person/${c.id}`} className="group w-24 shrink-0 text-center" aria-label={`${c.name}: view filmography`}>
+                  <div className="relative mx-auto h-24 w-24 overflow-hidden rounded-full bg-surface-2 ring-1 ring-white/10 transition group-hover:ring-white/40">
+                    {c.profile_path && <img src={tmdbImage(c.profile_path, "w300")} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" />}
+                    <span className="absolute inset-0 grid place-items-center bg-black/55 px-2 text-[10px] font-medium leading-tight opacity-0 transition-opacity duration-150 group-hover:opacity-100">View filmography</span>
                   </div>
-                  <div className="mt-2 text-xs font-medium leading-tight">{c.name}</div>
+                  <div className="mt-2 text-xs font-medium leading-tight group-hover:underline">{c.name}</div>
                   {c.character && <div className="text-[11px] leading-tight text-muted">{c.character}</div>}
-                </div>
+                </Link>
               ))}
             </div>
           </div>
@@ -123,7 +124,7 @@ function Credits({ title, people }: { title: string; people: { id: number; name:
       <span className="text-muted">{title} </span>
       {people.map((p, i) => (
         <span key={p.id}>
-          <Link to={`/search?q=${encodeURIComponent(p.name)}`} className="hover:underline">{p.name}</Link>
+          <Link to={`/person/${p.id}`} className="hover:underline" title="View filmography">{p.name}</Link>
           {i < people.length - 1 ? ", " : ""}
         </span>
       ))}
