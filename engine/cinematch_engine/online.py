@@ -224,6 +224,7 @@ class OnlineEngine:
     def reasons(self, st: UserState, row: int, shares: dict, reranked: bool = False) -> list[dict]:
         cat = self.cat
         liked = np.array(st.liked_rows(), dtype=np.int64)
+        liked = liked[liked != row]          # a film the user liked is not its own reason
         content_sim = None
         if len(liked):
             sims = np.asarray((cat.content[liked] @ cat.content[row].T).todense()).ravel()

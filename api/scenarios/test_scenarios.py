@@ -138,3 +138,15 @@ def test_13_more_like_this_is_similarity_alone(client):
     iron_man = find("SELECT id FROM movies WHERE title = 'Iron Man' AND year = 2008")
     titles = [s["movie"]["title"] for s in client.get(f"/api/movies/{iron_man[0]}/similar").json()["items"][:5]]
     assert "Iron Man 2" in titles
+
+
+def test_14_pages_of_films_you_liked_or_rated_open(client):
+    """Regression: a film the user liked or rated 8+ used to crash its own explanation (500, shown as
+    'Film not found'). Every such page must open, with reasons."""
+    films = find("SELECT id FROM movies WHERE title IN ('Inception', 'Zodiac', 'The Pursuit of Happyness') ORDER BY id")
+    client.put(f"/api/reactions/{films[0]}", json={"value": 1})
+    client.put(f"/api/ratings/{films[1]}", json={"rating": 9})
+    client.put(f"/api/ratings/{films[2]}", json={"rating": 10})
+    for f in films:
+        res = client.get(f"/api/movies/{f}")
+        assert res.status_code == 200, f
