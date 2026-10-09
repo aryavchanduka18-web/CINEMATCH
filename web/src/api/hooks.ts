@@ -15,6 +15,11 @@ export const useSimilar = (id: number) =>
 export const useFranchise = (id: number) =>
   useQuery({ queryKey: ["franchise", id], queryFn: () => api<{ sections: FranchiseSection[] }>(`/movies/${id}/franchise`) });
 
+export type CollectionRail = { key: string; title: string; count: number; items: RecItem[] };
+
+export const useCollections = () =>
+  useQuery({ queryKey: ["collections"], queryFn: () => api<{ collections: CollectionRail[] }>("/collections"), staleTime: 60_000 });
+
 type FeedbackAction =
   | { kind: "rate"; rating: number | null }
   | { kind: "react"; value: 1 | -1 | 0 }
@@ -38,7 +43,7 @@ export function useFeedback(movieId: number, source?: string) {
       }
     },
     onSettled: () => {
-      for (const key of ["home", "movie", "me", "list", "activity", "genre", "taste", "franchise"]) qc.invalidateQueries({ queryKey: [key] });
+      for (const key of ["home", "movie", "me", "list", "activity", "genre", "taste", "franchise", "collections"]) qc.invalidateQueries({ queryKey: [key] });
     },
   });
 }
