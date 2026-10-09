@@ -15,6 +15,7 @@ from cinematch_engine.models.item_cf import ItemCF
 from cinematch_engine.models.popularity import PopularityModel
 from cinematch_engine.models.svd import FunkSVD
 from cinematch_engine.sources import SourceModels
+from pipeline.catalog import original_gate_mask
 from pipeline.common import ARTIFACTS, PROCESSED, get_logger
 
 log = get_logger("models_io")
@@ -26,19 +27,27 @@ def settings(name: str) -> dict:
     return json.loads((MODELS / f"{name}.json").read_text())["settings"]
 
 
-def content_matrix() -> tuple[sp.csr_matrix, np.ndarray]:
-    """Tuned content features for the WHOLE product catalog (rows follow movies_clean order)."""
+def content_features() -> tuple[sp.csr_matrix, np.ndarray, np.ndarray]:
+    """Tuned content features for the WHOLE product catalog (rows follow movies_clean order), and the
+    columns learned from the original-gate films (vocabularies come from those films only, see
+    original_gate_mask; labels seen only in films added later sit in extra columns)."""
     s = settings("content")
     movies = pd.read_parquet(PROCESSED / "movies_clean.parquet")
     credits = pd.read_parquet(PROCESSED / "credits_clean.parquet")
-    feats = combine(build_blocks(movies, credits, ngram_max=s["ngram_max"]), s["block_weights"])
+    feats = combine(build_blocks(movies, credits, ngram_max=s["ngram_max"], fit_mask=original_gate_mask(movies)),
+                    s["block_weights"])
     x = feats.matrix
     if s.get("thin_text_scale", 1.0) != 1.0:
         from importlib import import_module
         apply_thin = import_module("pipeline.09_train_models").apply_thin
         lo, hi = feats.block_columns["text"]
         x = apply_thin(x, movies["thin_text"].to_numpy(), lo, hi, s["thin_text_scale"])
-    return x, movies["tmdb_id"].to_numpy()
+    return x, movies["tmdb_id"].to_numpy(), feats.fit_columns()
+
+
+def content_matrix() -> tuple[sp.csr_matrix, np.ndarray]:
+    x, tmdb, _ = content_features()
+    return x, tmdb
 
 
 def save_models(data: SplitData) -> None:

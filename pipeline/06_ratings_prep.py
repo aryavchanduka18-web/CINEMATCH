@@ -1,6 +1,7 @@
-"""Step 6: ratings on catalog (part A) films, users with >= 20 of them, 30,000 sampled users, x2 scale."""
+"""Step 6: ratings on the evaluation backbone (part A, original gate), users with >= 20 of them, 30,000 sampled users, x2 scale."""
 import pandas as pd
 
+from pipeline.catalog import backbone_ml_ids
 from pipeline.common import ML_DIR, PROCESSED, SEED, get_logger, write_json
 from pipeline.ratings import filter_and_sample, scale_to_10
 
@@ -10,7 +11,7 @@ MIN_RATINGS, N_USERS = 20, 30_000
 
 def main() -> None:
     catalog = pd.read_csv(PROCESSED / "catalog_ids.csv")
-    film_ids = catalog.loc[catalog["catalog_part"] == "A", "ml_movie_id"].dropna().astype("int32")
+    film_ids = backbone_ml_ids(catalog)
     raw = pd.read_csv(
         ML_DIR / "ratings.csv", engine="pyarrow",
         dtype={"userId": "int32", "movieId": "int32", "rating": "float32", "timestamp": "int64"},

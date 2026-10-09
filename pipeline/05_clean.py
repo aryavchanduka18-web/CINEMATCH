@@ -11,11 +11,11 @@ import pandas as pd
 import yaml
 from tqdm import tqdm
 
-from pipeline.catalog import gate_failures, overview_words, parse_credits, parse_movie
+from pipeline.catalog import gate_failures, original_gate_failures, overview_words, parse_credits, parse_movie
 from pipeline.colors import dominant_color
 from pipeline.audit import write_catalog_audit
 from pipeline.common import IMAGES_DIR, PROCESSED, TMDB_DIR, get_logger, read_json, write_json
-from pipeline.selection import hollywood_rule, select
+from pipeline.selection import hollywood_rule, relaxed_additions, select
 from pipeline.tmdb import TMDB
 
 log = get_logger("05_clean")
@@ -43,15 +43,16 @@ def load_candidates() -> tuple[pd.DataFrame, dict]:
         path = TMDB_DIR / f"{tmdb_id}.json"
         detail = read_json(path) if path.exists() else {"_status": "missing"}
         if "_status" in detail:
-            rows.append({"tmdb_id": tmdb_id, "reasons": ["not_found_on_tmdb"], "us_production": False,
-                         "in_collection": False})
+            rows.append({"tmdb_id": tmdb_id, "reasons": ["not_found_on_tmdb"], "original_reasons": ["not_found_on_tmdb"],
+                         "us_production": False, "in_collection": False})
             continue
         details[tmdb_id] = detail
-        reasons = gate_failures(detail)
+        reasons, original = gate_failures(detail), original_gate_failures(detail)
         if detail.get("adult"):
             reasons.append("adult")
+            original.append("adult")
         release = detail.get("release_date") or None
-        rows.append({"tmdb_id": tmdb_id, "reasons": reasons, "title": detail.get("title"),
+        rows.append({"tmdb_id": tmdb_id, "reasons": reasons, "original_reasons": original, "title": detail.get("title"),
                      "release_date": release, "year": int(release[:4]) if release else None,
                      "status": detail.get("status"),
                      "original_language": (detail.get("original_language") or "").lower(),
@@ -60,6 +61,7 @@ def load_candidates() -> tuple[pd.DataFrame, dict]:
                      "in_collection": bool(detail.get("belongs_to_collection"))})
     gated = cand.merge(pd.DataFrame(rows), on="tmdb_id", how="left")
     gated["passed"] = gated["reasons"].map(len) == 0
+    gated["original_passed"] = gated["original_reasons"].map(len) == 0
     # Detail vote counts are fresher than the discover listings.
     gated["tmdb_vote_count"] = gated["vote_count_detail"].fillna(gated["tmdb_vote_count"])
     gated["year"] = gated["year"].astype("Float64")
@@ -121,11 +123,18 @@ def main() -> None:
     summary = read_json(PROCESSED / "catalog_candidates_summary.json")
     window = summary["part_c_window"]
     gated, details = load_candidates()
-    catalog, chosen = select(gated, CFG, date.fromisoformat(window["start"]), date.fromisoformat(window["end"]))
-    log.info("selected %s with %s", catalog["part"].value_counts().to_dict(), chosen)
+    start, end = date.fromisoformat(window["start"]), date.fromisoformat(window["end"])
+    # First the cut with the original gate (unchanged from the first build: same evaluation backbone),
+    # then the films that only the relaxed gate lets in, with that cut's thresholds.
+    base, chosen = select(gated.assign(passed=gated["original_passed"]), CFG, start, end)
+    extra = relaxed_additions(gated, base, chosen, CFG, start, end)
+    catalog = pd.concat([base.assign(relaxed_gate=False), extra.assign(relaxed_gate=True)], ignore_index=True)
+    log.info("selected %s with %s; relaxed gate added %s", base["part"].value_counts().to_dict(), chosen,
+             extra["part"].value_counts().to_dict())
 
     movies = pd.DataFrame([parse_movie(details[t]) for t in catalog["tmdb_id"]])
-    movies = movies.merge(catalog[["tmdb_id", "part", "ml_movie_id"]].rename(columns={"part": "catalog_part"}), on="tmdb_id")
+    movies = movies.merge(catalog[["tmdb_id", "part", "ml_movie_id", "relaxed_gate"]].rename(columns={"part": "catalog_part"}),
+                          on="tmdb_id")
     movies["ml_movie_id"] = movies["ml_movie_id"].astype("Int64")
     # Same IMDb id under two TMDB ids is a duplicate: keep the first (highest-priority part).
     has_imdb = movies["imdb_id"].notna()
@@ -138,7 +147,7 @@ def main() -> None:
     credits = pd.DataFrame([row for t in movies["tmdb_id"] for row in parse_credits(details[t])])
     movies.to_parquet(PROCESSED / "movies_clean.parquet", index=False)
     credits.to_parquet(PROCESSED / "credits_clean.parquet", index=False)
-    movies[["tmdb_id", "catalog_part", "ml_movie_id", "imdb_id"]].to_csv(PROCESSED / "catalog_ids.csv", index=False)
+    movies[["tmdb_id", "catalog_part", "ml_movie_id", "imdb_id", "relaxed_gate"]].to_csv(PROCESSED / "catalog_ids.csv", index=False)
 
     dropped = relevant_drops(gated)
     write_json(PROCESSED / "metadata_report.json", {
@@ -147,12 +156,13 @@ def main() -> None:
         "chosen_thresholds": chosen,
         "catalog_size": len(movies),
         "by_part": movies["catalog_part"].value_counts().to_dict(),
+        "added_by_relaxed_gate": movies.loc[movies["relaxed_gate"], "catalog_part"].value_counts().to_dict(),
         "part_b_by_language": movies[movies["catalog_part"] == "B"]["original_language"].value_counts().to_dict(),
         "candidates": int(gated["tmdb_id"].nunique()),
         "part_notes": {"A": "MovieLens films", "B": "curated international", "C": "new & notable",
                        "D": "Hollywood enrichment: famous US productions missing from A/B/C"},
         "part_a_gate_pass_at_thresholds": {
-            str(t): int(((gated["part"] == "A") & gated["passed"] & (gated["ml_rating_count"] >= t)).sum())
+            str(t): int(((gated["part"] == "A") & gated["original_passed"] & (gated["ml_rating_count"] >= t)).sum())
             for t in (50, 100, 154)},
         "dropped_by_gate": int(len(dropped)),
         "drop_reasons": dict(Counter(r for rs in dropped["reasons"] for r in rs).most_common()),

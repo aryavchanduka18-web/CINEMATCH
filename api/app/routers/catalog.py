@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import user_id_from
 from app.db import get_db
+from app.models.catalog import normalize_sql
 from app.services import recommender as rec
 from app.services.movies import cards, detail
 
@@ -14,7 +15,7 @@ router = APIRouter(tags=["catalog"])
 
 @router.get("/movies/{movie_id}")
 def movie(movie_id: int, request: Request, db: Session = Depends(get_db)) -> dict:
-    uid = user_id_from(request)
+    uid = user_id_from(request, db)
     d = detail(db, movie_id, uid)
     if d is None:
         raise HTTPException(404, "Unknown movie")
@@ -55,7 +56,7 @@ def similar(movie_id: int, request: Request, db: Session = Depends(get_db)) -> d
     if row is None:
         raise HTTPException(404, "Unknown movie")
     ids = [int(engine.cat.movie_ids[r]) for r in engine.similar(row)]
-    return {"items": cards(db, ids, user_id_from(request))}
+    return {"items": cards(db, ids, user_id_from(request, db))}
 
 
 @router.get("/movies")
@@ -82,23 +83,57 @@ def discover(request: Request, genre: str | None = None, lang: str | None = None
     p.update(limit=40, offset=(max(page, 1) - 1) * 40)
     ids = [r[0] for r in db.execute(text(f"SELECT m.id FROM movies m WHERE {' AND '.join(where)} ORDER BY {order} LIMIT :limit OFFSET :offset"), p)]
     total = db.execute(text(f"SELECT count(*) FROM movies m WHERE {' AND '.join(where)}"), p).scalar()
-    return {"items": cards(db, ids, user_id_from(request)), "total": total, "page": page}
+    return {"items": cards(db, ids, user_id_from(request, db)), "total": total, "page": page}
+
+
+SEARCH_LIMIT = 60
+FUZZY_BELOW = 10          # fuzzy title matches are added only when the exact search finds fewer films
+FUZZY_MIN_CHARS = 3       # shorter queries have too few trigrams to compare
+FUZZY_THRESHOLD = 0.6     # pg_trgm word_similarity of the query to the closest part of a title
 
 
 @router.get("/search")
 def search(q: str, request: Request, db: Session = Depends(get_db)) -> dict:
-    """Title, cast and director through the search_vector; genre and language by name."""
+    """Title, cast and director through the search_vector; genre and language by name.
+
+    Titles are also compared after normalization (no dots or apostrophes, punctuation as spaces), so
+    "LA confidential" finds "L.A. Confidential". Exact title matches rank first, then titles that start
+    with the query (a leading "The" is optional), most-voted first within each; the rest by text rank.
+    If that finds fewer than FUZZY_BELOW films, trigram similarity on the normalized title adds typo
+    matches ("horrible bossses"), best match first, with TMDB vote count as the tie-break."""
     q = q.strip()
     if not q:
         return {"items": []}
-    ids = [r[0] for r in db.execute(text("""
-        SELECT m.id FROM movies m
-        WHERE m.search_vector @@ plainto_tsquery('simple', :q)
-           OR m.id IN (SELECT mg.movie_id FROM movie_genres mg JOIN genres g ON g.id = mg.genre_id WHERE g.name ILIKE :like)
-           OR m.title ILIKE :like
-        ORDER BY ts_rank(m.search_vector, plainto_tsquery('simple', :q)) DESC, m.tmdb_vote_count DESC NULLS LAST
-        LIMIT 60"""), {"q": q, "like": f"%{q}%"})]
-    return {"items": cards(db, ids, user_id_from(request))}
+    # text() would read ":alnum" in the regex as a bind parameter, so those colons are escaped.
+    qn = "(" + normalize_sql(":q").replace("[:alnum:]", r"[\:alnum\:]") + ")"
+    ids = [r[0] for r in db.execute(text(f"""
+        WITH hits AS (
+            SELECT m.id, m.tmdb_vote_count AS votes,
+                   ts_rank(m.search_vector, plainto_tsquery('simple', :q)) AS rank,
+                   CASE WHEN m.title_norm IN ({qn}, 'the ' || {qn}) THEN 0
+                        WHEN m.title_norm LIKE {qn} || ' %' OR m.title_norm LIKE 'the ' || {qn} || ' %' THEN 1
+                        ELSE 2 END AS tier
+            FROM movies m
+            WHERE m.search_vector @@ plainto_tsquery('simple', :q)
+               OR m.id IN (SELECT mg.movie_id FROM movie_genres mg JOIN genres g ON g.id = mg.genre_id WHERE g.name ILIKE :like)
+               OR m.title ILIKE :like
+               OR ({qn} <> '' AND m.title_norm LIKE '%' || {qn} || '%'))
+        SELECT id FROM hits
+        ORDER BY tier, CASE WHEN tier < 2 THEN votes END DESC NULLS LAST, rank DESC, votes DESC NULLS LAST
+        LIMIT :limit"""), {"q": q, "like": f"%{q}%", "limit": SEARCH_LIMIT})]
+    if len(ids) < FUZZY_BELOW and len(q) >= FUZZY_MIN_CHARS:
+        # Sets the threshold of the indexed <% operator for this transaction only.
+        db.execute(text("SELECT set_config('pg_trgm.word_similarity_threshold', :t, true)"),
+                   {"t": str(FUZZY_THRESHOLD)})
+        fuzzy = db.execute(text(f"""
+            SELECT m.id FROM movies m
+            WHERE {qn} <% m.title_norm
+            ORDER BY round(greatest(word_similarity({qn}, m.title_norm), similarity({qn}, m.title_norm))::numeric, 2) DESC,
+                     m.tmdb_vote_count DESC NULLS LAST
+            LIMIT :limit"""), {"q": q, "limit": SEARCH_LIMIT})
+        seen = set(ids)
+        ids += [r[0] for r in fuzzy if r[0] not in seen][:SEARCH_LIMIT - len(ids)]
+    return {"items": cards(db, ids, user_id_from(request, db))}
 
 
 @router.get("/genres")
@@ -116,7 +151,7 @@ def genre_movies(slug: str, request: Request, page: int = 1, db: Session = Depen
     g = db.execute(text("SELECT id, name FROM genres WHERE slug = :s"), {"s": slug}).first()
     if g is None:
         raise HTTPException(404, "Unknown genre")
-    uid = user_id_from(request)
+    uid = user_id_from(request, db)
     if uid is None or not rec.artifacts_ready():
         return discover(request, genre=slug, page=page, db=db) | {"genre": g[1]}
     engine = rec.load_engine(db)

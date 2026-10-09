@@ -25,13 +25,16 @@ coverage, diversity and novelty than any single model. We do not claim it wins e
 - **MovieLens 32M** (ratings until October 2023): collaborative signals and evaluation.
 - **TMDB**: metadata, images, credits, keywords, certifications; recent releases.
 - **Wikidata**: awards (15,634 award rows in the catalog).
-- **Product catalog: 13,987 films** in four parts: A MovieLens backbone 9,995 (films with >= 154
-  ratings that pass the metadata gate), B international enrichment 3,302 (18 languages; Tamil, Telugu
-  and Malayalam reach the 150-film onboarding rule), C recent releases 474 (last 18 months before the
-  build date), D Hollywood enrichment 216 (famous US productions missing from A-C). The catalog audit
-  measures 99.6% coverage of the 500 and 99.5% of the 1,000 most-voted US films.
-- **Metadata gate:** poster, English overview of 15+ words, genre, director, 3+ cast. Films that fail
-  are dropped, never filled in.
+- **Product catalog: 14,292 films** in four parts: A MovieLens films 10,230, of which 9,995 form the
+  evaluation backbone (>= 154 ratings, original metadata gate), B international enrichment 3,370
+  (18 languages; Tamil, Telugu and Malayalam reach the 150-film onboarding rule), C recent releases 476
+  (last 18 months before the build date), D Hollywood enrichment 216 (famous US productions missing
+  from A-C). The catalog audit measures 100% coverage of the 1,000 most-voted US films.
+- **Metadata gate:** poster, English overview of 10+ words, genre, director, 1+ cast. Films that fail
+  are dropped, never filled in. The gate was first 15+ words and 3+ cast; it was relaxed because it
+  dropped famous films such as The Graduate, Annie Hall and The Big Short. The 305 films that only the
+  relaxed gate lets in (235 A, 68 B, 2 C) were added on top of the original cut and are not part of the
+  evaluation backbone, so the ratings sample, splits, models and every result below are unchanged.
 - **Ratings sample:** 30,000 users with 20+ ratings on part-A films (4.6 million ratings), scaled to
   1-10. Per-user time split 70/10/20, a global time cutoff (2018-08-14) as a robustness check, and
   500 part-A films held out completely for the new-movie experiment.
@@ -127,7 +130,7 @@ See `artifacts/lab/shilling.json`, `taste_map.json`, `ncf.json` and the Research
 - Offline implicit feedback is derived from ratings (7+); live implicit feedback comes from real events.
 - Several tuned settings sit at the edge of wide grids (popularity m, item CF shrinkage): validation
   rewards popular, well-supported recommendations, a known popularity bias of the evaluation itself.
-- Kannada has 127 films, below the 150-film onboarding rule, even at the lowest vote floor.
+- Kannada has 133 films, below the 150-film onboarding rule, even at the lowest vote floor.
 
 ## References
 Hu, Koren and Volinsky (2008), Collaborative filtering for implicit feedback datasets. Koren (2008),

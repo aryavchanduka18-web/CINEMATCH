@@ -11,10 +11,10 @@ and the training data. Run it with `scripts\data.ps1` (or `python -m pipeline.ru
 | 2 | Collect candidate films for parts A, B, C and D | 16,012 A + 6,221 B + 911 C + 5,007 D candidates |
 | 3 | One TMDB call per candidate (details, credits, keywords, certifications, logos) | every candidate cached |
 | 4 | Awards from Wikidata in bulk queries | 15,634 award rows for the catalog |
-| 5 | Metadata gate, final cut, cleaning, dominant colors, report per language, catalog audit | 13,987 films |
+| 5 | Metadata gate, final cut, cleaning, dominant colors, report per language, catalog audit | 13,987 films (14,292 after the gate was relaxed, section 3) |
 | 6 | Ratings sample, scaled to 1-10 | 30,000 users, 4.61 million ratings |
 | 7 | Time splits and new-movie holdout | 70/10/20 per user; 500 holdout films |
-| 8 | Content features (TF-IDF + structured blocks) | 13,987 x 115,181 sparse matrix |
+| 8 | Content features (TF-IDF + structured blocks) | 13,987 x 115,181 sparse matrix (+305 rows served, section 3) |
 | 12 | Load the catalog into PostgreSQL | movies, genres, people, credits, keywords, awards |
 
 Every download is cached on disk, so re-running the pipeline never fetches anything twice.
@@ -29,7 +29,7 @@ Every download is cached on disk, so re-running the pipeline never fetches anyth
   Mandarin, Cantonese, Portuguese, Turkish, Persian), most-voted first, at most 300 per language.
   Tamil, Telugu, Malayalam and Kannada use a lower vote minimum (Aryav, 2026-10-08) so they can reach
   the 150-film onboarding rule: the pipeline picks the highest minimum that gets each language to 150
-  films (Tamil 44 votes, Telugu 27, Malayalam 31). Kannada stops at the floor of 5 votes with 127 films,
+  films (Tamil 44 votes, Telugu 27, Malayalam 31). Kannada stops at the floor of 5 votes with 127 films (133 with the relaxed gate),
   because TMDB simply has no more Kannada films that pass the gate.
 - **Part C, recent releases (474).** Releases from the 18 months before the catalog build date
   (2025-04-08 to 2026-10-08) with at least 110 TMDB votes. MovieLens 32M stops in October 2023.
@@ -38,9 +38,9 @@ Every download is cached on disk, so re-running the pipeline never fetches anyth
   released before 1990 or belongs to a TMDB collection (a franchise). Most famous US films are already
   in part A, so D is mainly the films released between mid-2023 and April 2025 (96 of the 216), which are
   too new for MovieLens and too old for part C: for example Dune: Part Two, Deadpool & Wolverine,
-  Inside Out 2 and Wicked. The catalog audit (docs/catalog-audit.md) measures coverage: **995 of the
-  1,000 most-voted US films are in the catalog**; the 5 missing ones have English overviews shorter
-  than 15 words on TMDB.
+  Inside Out 2 and Wicked. The catalog audit (docs/catalog-audit.md) measures coverage: with the
+  relaxed gate (section 3) **all 1,000 of the 1,000 most-voted US films are in the catalog** (995 with
+  the original gate).
 
 The **product catalog** (what the website shows) is all four parts. The **evaluation universe** (what
 the models are compared on) is only part A, so a bigger catalog never makes the model comparison unfair.
@@ -51,9 +51,19 @@ their TMDB vote counts and live feedback on our site can recommend them. That is
 
 ## 3. The metadata gate (why some films are dropped)
 
-A film enters the catalog only if TMDB has: a poster, an English overview of at least 15 words,
-at least one genre, a director, and at least three cast members. 920 eligible candidates failed,
-mostly for a too-short overview (381) or too few cast members (368); 162 no longer exist on TMDB.
+A film enters the catalog only if TMDB has: a poster, an English overview of at least 10 words,
+at least one genre, a director, and at least one cast member. 280 eligible candidates still fail;
+162 of them no longer exist on TMDB.
+
+The first build used a stricter gate (15 words, 3 cast members). It dropped 920 candidates, among them
+famous films with a short TMDB overview or a short listed cast (The Graduate, Annie Hall, The Big
+Short, Furious 7, Little Women 2019, the Wallace & Gromit shorts), so Aryav relaxed it on 2026-10-08.
+To keep the evaluation exactly as it was, step 5 still makes the cut with the original gate first and
+then adds the 305 films that only the relaxed gate lets in (235 A, 68 B, 2 C), using the same
+thresholds. Those films are flagged `relaxed_gate` and are **not** in the evaluation backbone: the
+ratings sample, splits, trained models and results did not change. They are served through content
+and popularity (`pipeline/extend_serving.py` adds their content rows with the vocabulary learned from
+the original films, plus new columns for people only they have, so every existing row stays identical), like parts B, C and D.
 
 We **drop** a film instead of filling in missing fields. Inventing data would make the
 recommendations and the explanations dishonest.
@@ -62,7 +72,7 @@ recommendations and the explanations dishonest.
 
 - MovieLens stars (0.5 to 5.0) are multiplied by 2, giving the CineMatch 1-10 scale. Half stars
   map exactly to whole numbers, so nothing is lost.
-- We keep ratings on part-A films only, keep users with at least 20 of them, and sample
+- We keep ratings on the evaluation backbone only (part A films that passed the original gate), keep users with at least 20 of them, and sample
   **30,000 users** with a fixed random seed (42). All models train on the same sample, so the
   comparison is fair. A fixed seed means anyone re-running the pipeline gets the same sample.
 - **Per-user time split:** for each user, the oldest 70% of their ratings are training data,
@@ -117,5 +127,5 @@ director would produce wrong recommendations and fake reasons.
 
 **Q5. Why does onboarding only offer some languages?**
 A language must have at least 150 films so a new user who picks it gets a full list. Fifteen
-languages qualify, including Hindi, Tamil, Telugu and Malayalam. Kannada has 127 films even at the
+languages qualify, including Hindi, Tamil, Telugu and Malayalam. Kannada has 133 films even at the
 lowest vote floor, so it is honestly reported as below the line rather than padded with weak data.

@@ -12,65 +12,63 @@ US production (co-productions count), not already in A/B/C, metadata gate passed
 |---|---|
 | US films in the TMDB pool (>= 1000 votes) | 4,253 |
 | ...meeting the part-D rule | 3,111 |
-| Already in part A | 3,668 |
-| Already in part B or C | 107 |
+| Already in part A | 3,708 |
+| Already in part B or C | 109 |
 | Added as part D | 216 |
-| Failed the metadata gate | 23 |
+| Failed the metadata gate | 0 |
 
-Gate failures by reason: {'short_overview': 23}
+Gate failures by reason: none
 
-Top 500 US films by TMDB votes in the catalog: **498 of 500 (99.6%)**
+Top 500 US films by TMDB votes in the catalog: **500 of 500 (100.0%)**
 
-Top 1000 US films by TMDB votes in the catalog: **995 of 1000 (99.5%)**
+Top 1000 US films by TMDB votes in the catalog: **1000 of 1000 (100.0%)**
 
 ## Top-1000 US films still missing
 
 | Rank | Title | Year | Votes | Reason |
 |---|---|---|---|---|
-| 290 | Furious 7 | 2015 | 11,529 | failed gate: short_overview |
-| 370 | The Big Short | 2015 | 10,140 | failed gate: short_overview |
-| 639 | It Follows | 2015 | 7,181 | failed gate: short_overview |
-| 658 | Little Women | 2019 | 7,031 | failed gate: short_overview |
-| 943 | The Passion of the Christ | 2004 | 5,368 | failed gate: short_overview |
+| - | none | | | |
 
 ## Catalog composition
 
 | Part | Films |
 |---|---|
-| A | 9,995 |
-| B | 3,302 |
-| C | 474 |
+| A | 10,230 |
+| B | 3,370 |
+| C | 476 |
 | D | 216 |
-| **Total** | **13,987** |
+| **Total** | **14,292** |
+
+Of these, 305 films (A 235, B 68, C 2) pass only the relaxed metadata gate (overview >= 10 words, >= 1 cast member). They were added on top of the cut made with the original gate (15 words, 3 cast), with its thresholds, and are outside the evaluation backbone.
 
 | Language | Films |
 |---|---|
-| en | 9,267 |
-| fr | 499 |
-| it | 369 |
-| ja | 353 |
-| es | 348 |
-| zh | 340 |
-| ko | 337 |
-| de | 325 |
-| pt | 310 |
-| hi | 304 |
-| cn | 294 |
-| tr | 268 |
-| te | 158 |
-| ta | 152 |
-| ml | 151 |
-| kn | 127 |
-| ru | 65 |
-| sv | 48 |
+| en | 9,476 |
+| fr | 515 |
+| it | 375 |
+| ja | 355 |
+| es | 354 |
+| zh | 343 |
+| ko | 340 |
+| de | 336 |
+| pt | 316 |
+| hi | 313 |
+| cn | 295 |
+| tr | 279 |
+| te | 161 |
+| ml | 153 |
+| ta | 153 |
+| kn | 133 |
+| ru | 69 |
+| sv | 50 |
 | da | 46 |
 | bn | 44 |
-| fa | 38 |
+| fa | 39 |
 | no | 19 |
-| fi | 15 |
+| fi | 17 |
 | pl | 15 |
 | nl | 13 |
-| cs | 12 |
+| cs | 13 |
 | th | 10 |
 
 Languages with fewer than 10 films are listed in artifacts/metrics/catalog_audit.json.

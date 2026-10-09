@@ -59,6 +59,8 @@ def write_catalog_audit(gated: pd.DataFrame, movies: pd.DataFrame, h: dict, wind
         "catalog_by_part": movies["catalog_part"].value_counts().sort_index().to_dict(),
         "catalog_by_language": movies["original_language"].value_counts().to_dict(),
         "catalog_total": int(len(movies)),
+        "added_by_relaxed_gate": (movies.loc[movies["relaxed_gate"], "catalog_part"].value_counts().sort_index().to_dict()
+                                  if "relaxed_gate" in movies else {}),
     }
     write_json(ARTIFACTS / "metrics" / "catalog_audit.json", audit)
 
@@ -88,7 +90,14 @@ def write_catalog_audit(gated: pd.DataFrame, movies: pd.DataFrame, h: dict, wind
     lines += [f"| {m['rank']} | {m['title']} | {m['year'] or ''} | {m['votes']:,} | {m['reason']} |" for m in missing] or ["| - | none | | | |"]
     lines += ["", "## Catalog composition", "", "| Part | Films |", "|---|---|"]
     lines += [f"| {k} | {v:,} |" for k, v in audit["catalog_by_part"].items()]
-    lines += [f"| **Total** | **{audit['catalog_total']:,}** |", "", "| Language | Films |", "|---|---|"]
+    lines += [f"| **Total** | **{audit['catalog_total']:,}** |", ""]
+    if audit["added_by_relaxed_gate"]:
+        added = audit["added_by_relaxed_gate"]
+        lines += [f"Of these, {sum(added.values()):,} films ({', '.join(f'{k} {v:,}' for k, v in added.items())}) pass only the "
+                  "relaxed metadata gate (overview >= 10 words, >= 1 cast member). They were added on top of the cut "
+                  "made with the original gate (15 words, 3 cast), with its thresholds, and are outside the "
+                  "evaluation backbone.", ""]
+    lines += ["| Language | Films |", "|---|---|"]
     lines += [f"| {k} | {v:,} |" for k, v in audit["catalog_by_language"].items() if v >= 10]
     lines += ["", "Languages with fewer than 10 films are listed in artifacts/metrics/catalog_audit.json.", ""]
     (ROOT / "docs" / "catalog-audit.md").write_text("\n".join(lines), encoding="utf-8")

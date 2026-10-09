@@ -2,7 +2,7 @@
 from datetime import date
 
 from sqlalchemy import (
-    CHAR, CheckConstraint, Date, ForeignKey, Index, Integer, Numeric, REAL,
+    CHAR, CheckConstraint, Computed, Date, ForeignKey, Index, Integer, Numeric, REAL,
     SmallInteger, String, Text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, TSVECTOR
@@ -31,11 +31,25 @@ FROM (
 WHERE p.id = m.id
 """
 
+
+def normalize_sql(expr: str) -> str:
+    """SQL that normalizes a title (or a search query) for typo-tolerant matching: lower case, dots and
+    apostrophes removed ("L.A." -> "la", "Schindler's" -> "schindlers"), any other run of punctuation
+    or spaces turned into one space. Used for movies.title_norm and, with the same expression, the query."""
+    return (f"lower(btrim(regexp_replace(regexp_replace({expr}, '[.''’`]', '', 'g'), "
+            f"'[^[:alnum:]]+', ' ', 'g')))")
+
+
+TITLE_NORM_SQL = normalize_sql("title")
+
+
 class Movie(Base):
     __tablename__ = "movies"
     __table_args__ = (
         CheckConstraint("catalog_part IN ('A','B','C','D')", name="ck_movies_catalog_part"),
         Index("ix_movies_search_vector", "search_vector", postgresql_using="gin"),
+        Index("ix_movies_title_norm_trgm", "title_norm", postgresql_using="gin",
+              postgresql_ops={"title_norm": "gin_trgm_ops"}),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -66,6 +80,7 @@ class Movie(Base):
     popularity_score: Mapped[float | None] = mapped_column(REAL)
     tmdb_vote_count: Mapped[int | None] = mapped_column(Integer)
     search_vector = mapped_column(TSVECTOR)
+    title_norm: Mapped[str | None] = mapped_column(Text, Computed(TITLE_NORM_SQL, persisted=True))
 
 
 class Genre(Base):

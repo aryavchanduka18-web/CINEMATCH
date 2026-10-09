@@ -49,6 +49,13 @@ class Profiles:
         return self.ratings.maximum(self.likes.astype(np.float32) * LIKE_AS_RATING).tocsr()
 
 
+def _same_structure(m: sp.csr_matrix, data: np.ndarray) -> sp.csr_matrix:
+    """A CSR matrix with new values on m's sparsity pattern, sharing m's index arrays (no copy)."""
+    out = sp.csr_matrix((data, m.indices, m.indptr), shape=m.shape, copy=False)
+    out.has_sorted_indices = m.has_sorted_indices        # never re-sort: the indices are shared
+    return out
+
+
 class SourceModels:
     """Fitted source models over one item index space."""
 
@@ -64,11 +71,15 @@ class SourceModels:
         # user CF neighbors come from the training users
         means = np.asarray(train.sum(axis=1)).ravel() / np.maximum(np.diff(train.indptr), 1)
         self.cf_means = means.astype(np.float32)
+        # Five matrices over the same ratings: centered, who-rated-what, and their transposes. They share
+        # two sparsity structures, so the index arrays (and the all-ones data) are stored once. The values
+        # are exactly those of indicator(), squared() and .T.tocsr(); this only saves memory (hosting has 512 MB).
         self.cf_rc = center_by_user(train, self.cf_means)
-        self.cf_ind_t = indicator(self.cf_rc).T.tocsr()
-        self.cf_sq_t = squared(self.cf_rc).T.tocsr()
         self.cf_rc_t = self.cf_rc.T.tocsr()
-        self.cf_ind = indicator(self.cf_rc)
+        ones = np.ones(self.cf_rc.nnz, dtype=np.float32)
+        self.cf_ind = _same_structure(self.cf_rc, ones)
+        self.cf_ind_t = _same_structure(self.cf_rc_t, ones)
+        self.cf_sq_t = _same_structure(self.cf_rc_t, self.cf_rc_t.data ** 2)
         self.user_cf = user_cf                 # {"k", "min_overlap", "beta"}
         self.svd = svd                         # {"mu", "bi", "Q", "reg"}
         self.als = als                         # {"Y", "alpha", "reg"}
