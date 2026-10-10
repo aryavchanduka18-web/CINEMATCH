@@ -15,11 +15,14 @@ PAGE = 40
 
 
 def hidden(db: Session, uid: int | None) -> set[int]:
-    """Films the user disliked or has watched: like Home, collections do not offer them again."""
+    """Films the user rated, liked, disliked, watched or picked in onboarding: like Home and Top Picks,
+    collections do not offer them again (More Like This still shows them; it is similarity alone)."""
     if uid is None:
         return set()
-    return set(db.execute(text("""SELECT movie_id FROM reactions WHERE user_id = :u AND value = -1
-        UNION SELECT movie_id FROM watched WHERE user_id = :u"""), {"u": uid}).scalars())
+    return set(db.execute(text("""SELECT movie_id FROM ratings WHERE user_id = :u
+        UNION SELECT movie_id FROM reactions WHERE user_id = :u
+        UNION SELECT movie_id FROM watched WHERE user_id = :u
+        UNION SELECT movie_id FROM onboarding_picks WHERE user_id = :u"""), {"u": uid}).scalars())
 
 
 @router.get("/collections")

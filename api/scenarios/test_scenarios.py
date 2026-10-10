@@ -194,3 +194,24 @@ def test_17_a_film_shows_the_same_match_everywhere(client):
         m = it["movie"]["id"]
         assert client.get(f"/api/movies/{m}").json()["match_pct"] == it["match_pct"], m
         assert client.get(f"/api/recs/explain/{m}").json()["match_pct"] == it["match_pct"], m
+
+
+def test_18_rated_or_watched_films_leave_collections_but_stay_in_more_like_this(client):
+    """Films you rated or watched are not recommended again anywhere on Home, collection rows included;
+    More Like This (similarity alone) still lists them."""
+    onboard(client, find("SELECT id FROM movies WHERE title IN ('Zodiac', 'Heat', 'Se7en', 'Memento', 'Prisoners')"))
+    anchor = find("SELECT id FROM movies WHERE title = 'Inception'")[0]
+    similar = lambda: [i["movie"]["id"] for i in client.get(f"/api/movies/{anchor}/similar").json()["items"]]
+    rows = client.get("/api/collections").json()["collections"]
+    in_rows = [i["movie"]["id"] for r in rows for i in r["items"]]
+    sim = similar()
+    rated, watched, rated_in_row = sim[0], sim[1], next(m for m in in_rows if m not in sim[:2])
+    client.put(f"/api/ratings/{rated}", json={"rating": 8})
+    client.put(f"/api/watched/{watched}")
+    client.put(f"/api/ratings/{rated_in_row}", json={"rating": 6})
+    rows = client.get("/api/collections").json()["collections"]
+    home = client.get("/api/recs/home").json()
+    shown = ({i["movie"]["id"] for r in rows for i in r["items"]} | {i["movie"]["id"] for i in home["hero"]}
+             | {i["movie"]["id"] for r in home["rails"] for i in r["items"]})
+    assert not {rated, watched, rated_in_row} & shown
+    assert similar() == sim                            # More Like This keeps them
