@@ -183,3 +183,14 @@ def test_16_films_you_acted_on_are_not_recommended_back(client):
     shown.update({i["movie"]["id"]: "hero" for i in home["hero"]})
     back = {name: shown[m] for name, m in done.items() if m in shown}
     assert not back, f"recommended back: {back}"
+
+
+def test_17_a_film_shows_the_same_match_everywhere(client):
+    """The Match % on Home (hero and Top Picks) equals the one on the film page and in Why?."""
+    onboard(client, find("SELECT id FROM movies WHERE title IN ('Inception', 'Zodiac', 'Heat', 'Se7en', 'Memento')"))
+    home = client.get("/api/recs/home").json()
+    items = home["hero"] + next(r["items"] for r in home["rails"] if r["key"] == "top_picks")[:5]
+    for it in items:
+        m = it["movie"]["id"]
+        assert client.get(f"/api/movies/{m}").json()["match_pct"] == it["match_pct"], m
+        assert client.get(f"/api/recs/explain/{m}").json()["match_pct"] == it["match_pct"], m

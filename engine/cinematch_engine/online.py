@@ -202,10 +202,13 @@ class OnlineEngine:
         picked = items[local]
         shares = contributions(norm[:, :TOP_N][:, local], w)
         blend_rank = {int(i): j for j, i in enumerate(items)}
+        # Match % comes from the catalog-wide hybrid score, as on the film page, Why, lists and genre pages,
+        # so a film shows the same number everywhere (the pool score above only decides what is picked).
+        catalog = self.rail_scores(st, scores)
         out = []
         for pos, (row, sc) in enumerate(zip(picked, rel[local])):
             share = {s: float(shares[si, pos]) for si, s in enumerate(SOURCES)}
-            out.append({"row": int(row), "score": float(sc), "match_pct": int(self.match(st.stage, sc)),
+            out.append({"row": int(row), "score": float(sc), "match_pct": int(self.match(st.stage, float(catalog[row]))),
                         "shares": share, "reranked": blend_rank[int(row)] > pos + 3})
         return out
 
