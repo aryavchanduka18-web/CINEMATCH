@@ -26,7 +26,28 @@ type FeedbackAction =
   | { kind: "list"; on: boolean }
   | { kind: "watched"; on: boolean };
 
-/** Like / dislike / list / watched / rate with an immediate refresh of everything personal (spec 6.12). */
+type State = { rating: number | null; reaction: number; in_list: boolean; watched: boolean };
+
+/** Walk any cached payload: give this film's cards the new user state, and (when `drop`) take the film out of
+ *  lists entirely. Works for every shape we cache (home rails, collections, pages, film detail). */
+export function patchFilm(data: unknown, id: number, change: Partial<State>, drop: boolean): unknown {
+  if (Array.isArray(data)) {
+    const out = drop ? data.filter((x) => !(x && typeof x === "object" && (x as RecItem).movie?.id === id)) : data;
+    return out.map((x) => patchFilm(x, id, change, drop));
+  }
+  if (data && typeof data === "object") {
+    const o = data as Record<string, unknown>;
+    const isFilm = (o.movie as { id?: number } | undefined)?.id === id || (o.id === id && "user_state" in o);
+    const next: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(o)) next[k] = k === "user_state" && isFilm ? { ...(v as State), ...change } : patchFilm(v, id, change, drop);
+    return next;
+  }
+  return data;
+}
+
+/** Like / dislike / list / watched / rate with an immediate refresh of everything personal (spec 6.12).
+ *  Every cached list is updated at once (optimistic), and a disliked or watched film leaves Home and the
+ *  collection rows straight away, before the server's fresh lists arrive. */
 export function useFeedback(movieId: number, source?: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -40,6 +61,16 @@ export function useFeedback(movieId: number, source?: string) {
           return a.on ? send("PUT", `/list/${movieId}`, { source }) : send("DELETE", `/list/${movieId}`);
         case "watched":
           return a.on ? send("PUT", `/watched/${movieId}`) : send("DELETE", `/watched/${movieId}`);
+      }
+    },
+    onMutate: (a: FeedbackAction) => {
+      const change: Partial<State> =
+        a.kind === "rate" ? { rating: a.rating } : a.kind === "react" ? { reaction: a.value }
+          : a.kind === "list" ? { in_list: a.on } : { watched: a.on };
+      const leaves = (a.kind === "react" && a.value === -1) || (a.kind === "watched" && a.on);
+      for (const key of ["home", "collections", "genre", "discover", "franchise", "person-movies", "search", "similar", "movie", "list"]) {
+        qc.setQueriesData({ queryKey: [key] }, (d: unknown) =>
+          d === undefined ? d : patchFilm(d, movieId, change, leaves && (key === "home" || key === "collections")));
       }
     },
     onSettled: () => {
