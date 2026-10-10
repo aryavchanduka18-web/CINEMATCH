@@ -47,6 +47,18 @@ within thumb reach; on wider screens the same tabs sit in the top bar.
   Studio Ghibli, DreamWorks), and for films without a franchise "More from <director>" and
   "Franchise films like this".
 
+## Filmographies
+- Shah Rukh Khan's page listed only the 40 of his films that were in the catalog. The filmography rule
+  (`pipeline/filmographies.py`) adds the missing feature films of the catalog's leading stars (top-3
+  billed in 8+ catalog films) and directors (5+ films): released, 60+ minutes, passing the metadata
+  gate, and 50+ TMDB votes, or 1,000+ for English-language films. Hollywood is already well covered,
+  and Hindi films get far fewer TMDB votes. 2,357 films were added as part D (14,762 -> 17,119);
+  Shah Rukh Khan went from 40 to 60 films.
+- Same guarantees as the franchise rule: evaluation fingerprint identical (46 files), the 14,762
+  existing content rows unchanged. The new films reach users through the content and cold-start sources;
+  none appear in a test user's top 20, so they fill filmographies without crowding recommendations.
+- Peak memory 413 MB locally (Render free plan: 512 MB).
+
 ## More Like This is similarity only
 It used to take half its list from item-CF co-ratings, which surfaced Hollywood hits under *Sholay*.
 Now it is content similarity alone, the same for every user: content cosine + 0.3 genre overlap

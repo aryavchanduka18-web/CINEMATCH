@@ -58,10 +58,10 @@ def original_gate_failures(detail: dict) -> list[str]:
 
 def original_gate_mask(movies: pd.DataFrame) -> np.ndarray:
     """True for catalog films of the first build (they passed the original gate). Content vocabularies are
-    fit on these films only, so films added later, by the relaxed gate or the franchise rule, do not change
+    fit on these films only, so films added later, by the relaxed gate, franchise or filmography rule, do not change
     the features the models were tuned and evaluated with."""
     later = np.zeros(len(movies), dtype=bool)
-    for flag in ("relaxed_gate", "franchise_rule"):
+    for flag in ("relaxed_gate", "franchise_rule", "filmography_rule"):
         if flag in movies:
             later |= movies[flag].fillna(False).astype(bool).to_numpy()
     return ~later

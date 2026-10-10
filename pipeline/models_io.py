@@ -36,9 +36,9 @@ def content_features() -> tuple[sp.csr_matrix, np.ndarray, np.ndarray]:
 
 
 def catalog_stage(movies: pd.DataFrame) -> np.ndarray:
-    """When a film joined the catalog: 0 first build, 1 relaxed metadata gate, 2 franchise rule."""
+    """When a film joined the catalog: 0 first build, 1 relaxed metadata gate, 2 franchise rule, 3 filmography rule."""
     stage = np.zeros(len(movies), dtype=int)
-    for k, flag in ((1, "relaxed_gate"), (2, "franchise_rule")):
+    for k, flag in ((1, "relaxed_gate"), (2, "franchise_rule"), (3, "filmography_rule")):
         if flag in movies:
             stage[movies[flag].fillna(False).astype(bool).to_numpy()] = k
     return stage

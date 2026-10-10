@@ -80,7 +80,7 @@ already there, and finishes a bundle upload that stopped half way.
 - **New models**: run the pipeline on the laptop, then `deploy_data.py export` and `upload` again, then
   **Restart service**.
 - **New films or catalog changes** (for example the franchise update, which added 470 films and the
-  franchise names): run `export`, then
+  franchise names, or the filmography update, which added 2,357): run `export`, then
 
   ```powershell
   .\.venv\Scripts\python.exe scripts\deploy_data.py upload --refresh-catalog

@@ -14,3 +14,16 @@ hollywood:
 franchise:
   min_vote_count: 200
   min_runtime_min: 60
+# Filmography rule (asked for by Aryav 2026-10-10: Shah Rukh Khan's page had 40 of his films): a missing feature
+# film led (cast order <= lead_max_order) or directed by a catalog star or director is added as part D when it
+# is released, passes the metadata gate, runs min_runtime_min+ minutes and has enough TMDB votes:
+# min_vote_count_en for English-language films (Hollywood is already well covered: only notable ones),
+# min_vote_count for other languages (Hindi and other cinemas get far fewer TMDB votes).
+# A star leads min_lead_films+ catalog films; a director directed min_director_films+. pipeline/filmographies.py
+filmography:
+  lead_max_order: 2
+  min_lead_films: 8
+  min_director_films: 5
+  min_vote_count: 50
+  min_vote_count_en: 1000
+  min_runtime_min: 60
