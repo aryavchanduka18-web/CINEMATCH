@@ -101,7 +101,7 @@ function FilmTile({ f, wide = false }: { f: Credit; wide?: boolean }) {
         {[m.year, f.character ? `as ${f.character}` : f.roles.filter((r) => r !== "Acting").join(", ")].filter(Boolean).join(" · ")}
       </div>
       <div className="mt-0.5 flex gap-2 text-xs">
-        {f.match_pct != null && <span className="font-semibold text-accent">{f.match_pct}% match</span>}
+        {f.match_pct != null && <span className="text-base font-extrabold text-accent">{f.match_pct}% match</span>}
         {m.community_rating != null && <span className="text-white/70">★ {m.community_rating.toFixed(1)}</span>}
       </div>
     </Link>
