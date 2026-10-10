@@ -382,7 +382,8 @@ class OnlineEngine:
             take(f"because_you_liked:{int(cat.movie_ids[a])}", f'Because You Liked "{cat.titles[a]}"', neigh, src,
                  reason={"code": "because_you_liked", "anchor_movie_id": int(cat.movie_ids[a])})
 
-        cont = [r for r in st.recent_views if r not in st.ratings and r not in st.in_list and r not in st.dislikes]
+        acted = set(self.excluded(st).tolist()) | st.in_list   # rated, liked, disliked, watched, picked or saved
+        cont = [r for r in st.recent_views if r not in acted]
         if cont:
             rows = [r for r in cont if r not in used][:rail_size]
             if rows:
