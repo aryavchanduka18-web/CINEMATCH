@@ -159,3 +159,27 @@ def test_15_a_disliked_film_leaves_home(client):
     home = client.get("/api/recs/home").json()
     shown = {i["movie"]["id"] for i in home["hero"]} | {i["movie"]["id"] for r in home["rails"] for i in r["items"]}
     assert first not in shown
+
+
+def test_16_films_you_acted_on_are_not_recommended_back(client):
+    """Disliked, rated, liked or watched films leave every Home row, even right after you opened them
+    (which puts a film into Continue Exploring)."""
+    onboard(client, find("SELECT id FROM movies WHERE title IN ('Inception', 'Zodiac', 'Heat', 'Se7en', 'Memento')"))
+    home = client.get("/api/recs/home").json()
+    picks = [i["movie"]["id"] for i in home["hero"]] + top_ids(home)
+    acts = {
+        "dislike": lambda m: client.put(f"/api/reactions/{m}", json={"value": -1}),
+        "like": lambda m: client.put(f"/api/reactions/{m}", json={"value": 1}),
+        "rate": lambda m: client.put(f"/api/ratings/{m}", json={"rating": 6}),
+        "watched": lambda m: client.put(f"/api/watched/{m}"),
+    }
+    done = {}
+    for (name, act), m in zip(acts.items(), dict.fromkeys(picks)):
+        client.post("/api/events", json={"movie_id": m, "event_type": "detail_view"})
+        assert act(m).status_code < 300, name
+        done[name] = m
+    home = client.get("/api/recs/home").json()
+    shown = {i["movie"]["id"]: r["title"] for r in home["rails"] for i in r["items"]}
+    shown.update({i["movie"]["id"]: "hero" for i in home["hero"]})
+    back = {name: shown[m] for name, m in done.items() if m in shown}
+    assert not back, f"recommended back: {back}"
