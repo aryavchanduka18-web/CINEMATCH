@@ -45,16 +45,23 @@ export function CardArtwork({ item, eager = false }: { item: RecItem; eager?: bo
 export function CardMeta({ item, personal }: { item: RecItem; personal?: boolean }) {
   const m = item.movie;
   return (
-    <div className="mt-2 flex items-center gap-2 text-[13px] text-muted">
-      {personal && item.match_pct != null && <span className="font-semibold text-accent">{item.match_pct}% match</span>}
-      {personal && item.match_pct != null && agreementLabel(item.agreement) && (
-        <span className="rounded border border-white/15 px-1.5 text-[11px] text-white/70" title={`Model agreement ${item.agreement}%`}>
-          {agreementLabel(item.agreement)} agreement
-        </span>
+    <div className="mt-2">
+      {/* Match % leads; model agreement is a quiet footnote to it (details on the film page and in Why?). */}
+      {personal && item.match_pct != null && (
+        <div className="flex items-baseline gap-2">
+          <span className="text-lg font-extrabold leading-tight text-accent">{item.match_pct}% match</span>
+          {agreementLabel(item.agreement) && (
+            <span className="text-[10px] text-muted" title={`Model agreement ${item.agreement}%`}>
+              {agreementLabel(item.agreement)!.toLowerCase()} agreement
+            </span>
+          )}
+        </div>
       )}
-      {m.year && <span>{m.year}</span>}
-      {m.community_rating != null && <span>★ {m.community_rating.toFixed(1)}</span>}
-      {m.language && <span>{languageName(m.language)}</span>}
+      <div className="flex items-center gap-2 text-[13px] text-muted">
+        {m.year && <span>{m.year}</span>}
+        {m.community_rating != null && <span>★ {m.community_rating.toFixed(1)}</span>}
+        {m.language && <span>{languageName(m.language)}</span>}
+      </div>
     </div>
   );
 }

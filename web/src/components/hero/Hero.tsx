@@ -49,9 +49,9 @@ export default function Hero({ items }: { items: RecItem[] }) {
               <h1 className="mb-3 font-display text-4xl font-extrabold leading-[1.05] drop-shadow-lg md:text-6xl">{m.title}</h1>
             )}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-white/85">
-              {item.match_pct != null && <span className="font-semibold text-accent">{item.match_pct}% match</span>}
+              {item.match_pct != null && <span className="text-2xl font-extrabold text-accent">{item.match_pct}% match</span>}
               {item.match_pct != null && agreementLabel(item.agreement) && (
-                <span className="rounded border border-white/25 px-1.5 text-xs">{agreementLabel(item.agreement)} model agreement</span>
+                <span className="text-[11px] text-white/60">{agreementLabel(item.agreement)!.toLowerCase()} model agreement</span>
               )}
               {m.community_rating != null && <span>★ {m.community_rating.toFixed(1)}</span>}
               {m.year && <span>{m.year}</span>}
