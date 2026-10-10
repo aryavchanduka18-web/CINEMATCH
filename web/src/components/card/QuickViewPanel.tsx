@@ -44,7 +44,7 @@ export default function QuickViewPanel() {
             <div className="space-y-3 p-5 pt-0">
               <h2 className="font-display text-2xl font-bold">{item.movie.title}</h2>
               <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted">
-                {item.match_pct != null && <span className="font-semibold text-accent">{item.match_pct}% match</span>}
+                {item.match_pct != null && <span className="text-lg font-extrabold text-accent">{item.match_pct}% match</span>}
                 {item.movie.community_rating != null && <span>★ {item.movie.community_rating.toFixed(1)}</span>}
                 {item.movie.year && <span>{item.movie.year}</span>}
                 {item.movie.runtime && <span>{runtime(item.movie.runtime)}</span>}

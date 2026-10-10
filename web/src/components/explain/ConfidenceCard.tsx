@@ -24,27 +24,26 @@ export default function ConfidenceCard({ c }: { c?: Confidence }) {
   const [open, setOpen] = useState(false);
   if (!c) return null;
   const filled = c.agreement == null ? 0 : Math.round(c.agreement / 10);
+  const match = c.groups.find((g) => g.key === "hybrid")?.score ?? null;
   return (
     <section className="rounded-xl border border-white/10 bg-surface p-5" aria-label="Recommendation confidence">
       <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Recommendation confidence</h3>
 
-      <div className="mt-3 flex items-end justify-between gap-4">
-        <div>
-          <div className="font-display text-4xl font-extrabold leading-none">{c.agreement == null ? "–" : `${c.agreement}%`}</div>
-          <div className="mt-1 text-sm text-muted">Model agreement</div>
-        </div>
-        {c.label && (
-          <span className="rounded-full border border-white/15 px-3 py-1 text-sm">
-            {c.label} <span className="text-muted">agreement</span>
-          </span>
-        )}
-      </div>
-
-      {/* Ten fixed segments, no knob or track: a reading, not a control. */}
-      <div className="mt-4 grid grid-cols-10 gap-1" role="img" aria-label={c.agreement == null ? "Agreement not available yet" : `${c.agreement} percent agreement`}>
-        {Array.from({ length: 10 }, (_, i) => (
-          <span key={i} className={`h-1.5 rounded-sm ${i < filled ? TONE[c.label ?? "Low"] : "bg-white/10"}`} />
-        ))}
+      {/* Match % is the headline; model agreement is a small secondary reading under it. */}
+      {match != null && (
+        <div className="mt-3 font-display text-4xl font-extrabold leading-none text-accent">{match}% match</div>
+      )}
+      <div className="mt-3 flex items-center gap-3 text-xs text-muted">
+        <span>
+          {c.agreement == null ? "Model agreement not available yet" : `${c.agreement}% model agreement`}
+          {c.label && ` · ${c.label.toLowerCase()}`}
+        </span>
+        {/* Ten fixed segments, no knob or track: a reading, not a control. */}
+        <span className="grid w-24 grid-cols-10 gap-0.5" role="img" aria-label={c.agreement == null ? "Agreement not available yet" : `${c.agreement} percent agreement`}>
+          {Array.from({ length: 10 }, (_, i) => (
+            <span key={i} className={`h-1 rounded-sm ${i < filled ? TONE[c.label ?? "Low"] : "bg-white/10"}`} />
+          ))}
+        </span>
       </div>
 
       <p className="mt-4 text-sm leading-relaxed text-white/85">{c.sentence}</p>

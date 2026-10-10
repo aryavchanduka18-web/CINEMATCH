@@ -53,7 +53,7 @@ export default function Movie() {
               : <h1 className="font-display text-4xl font-extrabold md:text-5xl">{m.title}</h1>}
             {m.tagline && <p className="mt-2 text-lg italic text-white/75">{m.tagline}</p>}
             <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-white/85">
-              {m.match_pct != null && <span className="font-semibold text-accent">{m.match_pct}% match</span>}
+              {m.match_pct != null && <span className="text-2xl font-extrabold text-accent">{m.match_pct}% match</span>}
               {m.community_rating != null && <span>★ {m.community_rating.toFixed(1)} <span className="text-muted">({m.rating_count.toLocaleString()})</span></span>}
               {m.year && <span>{m.year}</span>}
               {m.runtime && <span>{runtime(m.runtime)}</span>}
