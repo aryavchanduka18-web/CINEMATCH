@@ -9,7 +9,7 @@ repository contains a password or key.
 | Piece | Where it runs on Render | Where it comes from |
 |---|---|---|
 | Website and API | One **web service** built from the `Dockerfile` | Your GitHub repository (`main` branch) |
-| Database | One **PostgreSQL** database | Created empty by Render |
+| Database | One **PostgreSQL** database on **Neon** (not Render) | Created empty on Neon, URL pasted into Render |
 | Film catalog (14,292 films, people, credits, keywords, awards) | Inside the database | Uploaded from your laptop (`catalog.dump`, about 14 MB) |
 | Demo account (`demo@cinematch.local`, same password as on your laptop) | Inside the database | Uploaded from your laptop (`demo_user.json`) |
 | Trained models and the Research Lab numbers | Inside the database, unpacked by the server at start | Uploaded from your laptop (`artifacts.tar.gz`, about 38 MB) |
@@ -32,9 +32,9 @@ free plan fits. The database uses about 240 MB of the free plan's 1 GB.
 ## Step 1: create the service and the database
 
 1. Open <https://dashboard.render.com>, click **New**, then **Blueprint**.
-2. Pick the `CINEMATCH` repository. Render finds `render.yaml` and shows two items:
-   `cinematch` (web service) and `cinematch-db` (database).
-3. Render asks for one value, `WEB_ORIGIN`. Type `https://cinematch.onrender.com`.
+2. Pick the `CINEMATCH` repository. Render finds `render.yaml` and shows the `cinematch` web service.
+3. Render asks for two values: `DATABASE_URL` (the Neon URL, see "Database on Neon") and `WEB_ORIGIN`.
+   Type `https://cinematch.onrender.com` for the second.
    (If Render gives the service a different address, change this value to that address in the
    service's **Environment** tab. The site works in the meantime.)
 4. Click **Apply**. Render creates the database, builds the Docker image (about 5 to 10 minutes the
@@ -44,8 +44,7 @@ free plan fits. The database uses about 240 MB of the free plan's 1 GB.
 
 ## Step 2: copy the catalog, demo account and models from the laptop
 
-1. In Render, open **cinematch-db**, click **Connect**, choose **External**, and copy the
-   **External Database URL**. Treat it like a password: do not paste it into chats, files or GitHub.
+1. Copy the Neon URL (Neon project, **Connect**, pooling off). Treat it like a password: do not paste it into chats, files or GitHub.
 2. In a terminal in the `cinematch` folder, make the three upload files:
 
    ```powershell
@@ -60,7 +59,7 @@ free plan fits. The database uses about 240 MB of the free plan's 1 GB.
    .\.venv\Scripts\python.exe scripts\deploy_data.py upload
    ```
 
-   Paste the External Database URL when it asks (the text stays hidden). It takes a minute or two and
+   Paste the Neon URL when it asks (the text stays hidden). It takes a minute or two and
    prints `1/3 Catalog`, `2/3 Demo account`, `3/3 Model bundle`, then `Done`.
 4. In Render, open the **cinematch** service, click **Manual Deploy**, then **Restart service**.
 5. Open the site. The home page now shows the hero and the rails. The first visit after a restart can
@@ -93,21 +92,50 @@ already there, and finishes a bundle upload that stopped half way.
 
 - The free web service **sleeps after 15 minutes without visitors**. The next visit wakes it, which takes
   about a minute. Open the site a few minutes before a demo.
-- Render's free database has an **expiry date** (shown on the database page). Before it expires, either
-  upgrade the database to a paid plan, or create a new Blueprint and repeat Step 2. Accounts made on the
-  site live in this database, so they go with it.
+- Render's free database expires after 30 days and is deleted 14 days later, so the database now lives on
+  **Neon** (free plan, no expiry, 1 GB per project; CineMatch uses about 240 MB). See "Database on Neon" below.
 - Sign-in lockout counters are kept in the server's memory, so a restart clears them.
 - There is no email service, so the site cannot send password reset or verification emails.
+
+## Database on Neon
+
+The web service stays on Render; only `DATABASE_URL` points somewhere else. To move an existing Render
+database to Neon without losing accounts:
+
+1. On <https://neon.com> create a project: Postgres **17**, region **AWS Asia Pacific (Singapore)**. Under
+   **Connect**, turn connection pooling **off** and copy the connection string (the Neon URL).
+2. Copy the Render database across with the `postgres:17` image (Docker Desktop running, in the `cinematch`
+   folder). `Read-Host` keeps the URLs out of PowerShell's history:
+
+   ```powershell
+   mkdir deploy-out -Force
+   $src = Read-Host "Paste the Render External Database URL"
+   $dst = Read-Host "Paste the Neon URL"
+   docker run --rm -e SRC=$src -v "${PWD}\deploy-out:/out" postgres:17 sh -c 'pg_dump "$SRC" -Fc --no-owner --no-privileges -f /out/full.dump'
+   docker run --rm -e DST=$dst -v "${PWD}\deploy-out:/out" postgres:17 sh -c 'pg_restore --no-owner --no-privileges -d "$DST" /out/full.dump'
+   ```
+
+   A few warnings about extension ownership are normal. Delete `deploy-out\full.dump` afterwards: it holds
+   user accounts.
+3. In the Render service's **Environment** tab set `DATABASE_URL` to the Neon URL (if it is still linked to
+   `cinematch-db`, delete it and add it again as a plain value), then **Manual Deploy**.
+4. Check `/api/health` shows `"db":"ok"`. Later uploads (`deploy_data.py upload`) take the Neon URL.
+
+For a brand-new setup, create the Neon project first, give its URL as `DATABASE_URL` when Render asks, and
+follow Step 2 above with the Neon URL.
+
+Neon's free compute pauses after about 5 minutes idle and wakes in under a second; `pool_pre_ping` in
+`api/app/db.py` replaces connections it dropped.
 
 ## If something goes wrong
 
 | What you see | What to do |
 |---|---|
 | Build fails on Render | Open the service's **Logs**. Most often a download timed out: click **Manual Deploy**, then **Deploy latest commit**. |
-| `/api/health` shows `"db":"error"` | The database is still starting, or the service lost its `DATABASE_URL`. In the **Environment** tab, `DATABASE_URL` must come from `cinematch-db`. |
+| `/api/health` shows `"db":"error"` | The database is still starting, or the service lost its `DATABASE_URL`. In the **Environment** tab, `DATABASE_URL` must be the Neon URL. |
 | `upload` says the database has no CineMatch tables | The service has not finished its first start. Wait for **Live**, then run `upload` again. |
 | `upload` stops with "SSL connection has been closed unexpectedly" | Run the same `upload` command again. It skips what is done and continues with the missing parts. |
-| `upload` cannot connect | Use the **External** URL (not the Internal one) and check that Docker Desktop is running. |
+| `upload` cannot connect | Use the Neon URL with `sslmode=require` and check that Docker Desktop is running. |
 | Home page shows no rails after the upload | Restart the service (Step 2.4). The logs should show `unpacked artifact bundle` and `recommender engine ready`. |
 | Service restarts with "out of memory" | Move the web service to the paid Starter plan. Our measurement fits 512 MB, but this is the fix if real traffic needs more. |
 
