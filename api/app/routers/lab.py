@@ -2,14 +2,27 @@
 import json
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.auth import user_id_from
 from app.db import get_db
 from app.services import recommender as rec
 
 router = APIRouter(prefix="/lab", tags=["lab"])
 ROOT = Path(__file__).resolve().parents[3] / "artifacts"
+DEMO_EMAIL = "demo@cinematch.local"
+
+
+def allow_user_view(request: Request, db: Session, user_id: int) -> None:
+    """A user's picks and taste are private: only the signed-in owner, or the public demo account, may look."""
+    if user_id_from(request, db) == user_id:
+        return
+    row = db.execute(text("SELECT email FROM users WHERE id = :u"), {"u": user_id}).first()
+    if row is not None and row[0] == DEMO_EMAIL:
+        return
+    raise HTTPException(403, "You can only inspect your own account or the demo account")
 
 
 def read(rel: str):
@@ -65,8 +78,9 @@ def catalog_audit() -> dict:
 
 
 @router.get("/user/{user_id}/candidates")
-def user_candidates(user_id: int, db: Session = Depends(get_db)) -> dict:
+def user_candidates(user_id: int, request: Request, db: Session = Depends(get_db)) -> dict:
     """User Inspector: stage, counts and per-source scores behind each top pick."""
+    allow_user_view(request, db, user_id)
     engine = rec.load_engine(db)
     st = rec.user_state(db, user_id, engine)
     picks = engine.top_picks(st, "balanced", k=20)
@@ -88,10 +102,12 @@ def ncf() -> dict:
 
 
 @router.get("/taste-map")
-def taste_map(user_id: int | None = None, db: Session = Depends(get_db)) -> dict:
+def taste_map(request: Request, user_id: int | None = None, db: Session = Depends(get_db)) -> dict:
     """The precomputed map, plus "You": the user's SVD vector folded in from their ratings and
     projected with the same PCA components."""
     import numpy as np
+    if user_id is not None:
+        allow_user_view(request, db, user_id)
     data = read("lab/taste_map.json")
     out = {k: data[k] for k in ("points", "explained_variance_ratio", "note")}
     if user_id is not None and rec.artifacts_ready():

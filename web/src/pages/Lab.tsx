@@ -230,12 +230,12 @@ function UserInspector() {
   const q = useQuery({ queryKey: ["lab", "user", uid], queryFn: get<{ stage: string; behavioral_count: number; onboarding_count: number; weights: Record<string, number>;
     items: { movie_id: number; title: string; final_score: number; match_pct: number; shares: Record<string, number>; reasons: { text: string }[] }[] }>(`/lab/user/${uid}/candidates`), enabled: !!uid, retry: false });
   return (
-    <Section title="User Inspector" note="Pick a site user to see their stage, counts, and for each recommended film the per-source share of the score, the final score, Match % and the reasons shown on the site.">
+    <Section title="User Inspector" note="Enter your own user id (signed in) or the demo account's id to see their stage, counts, and for each recommended film the per-source share of the score, the final score, Match % and the reasons shown on the site.">
       <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); setUid((e.currentTarget.elements.namedItem("uid") as HTMLInputElement).value); }}>
         <input name="uid" placeholder="User id" className="w-32 rounded-md border border-white/15 bg-surface-2 px-3 py-2 text-sm" />
         <button className="rounded-md bg-white px-4 py-2 text-sm font-semibold text-black">Inspect</button>
       </form>
-      {q.isError && <p className="mt-3 text-sm text-muted">No such user.</p>}
+      {q.isError && <p className="mt-3 text-sm text-muted">You can only inspect your own account (sign in first) or the demo account.</p>}
       {q.data && (
         <div className="mt-4 overflow-x-auto">
           <p className="text-sm">Stage <b className="capitalize">{q.data.stage}</b> · behavioral count {q.data.behavioral_count} · onboarding {q.data.onboarding_count}</p>
@@ -293,7 +293,7 @@ function TasteMap() {
   const q = useQuery({ queryKey: ["lab", "taste", uid], retry: false,
     queryFn: get<{ points: { x: number; y: number; title: string; genre: string }[]; explained_variance_ratio: number[]; you?: { x: number; y: number; ratings_used: number } }>(`/lab/taste-map${uid ? `?user_id=${uid}` : ""}`) });
   const [hover, setHover] = useState<string | null>(null);
-  if (q.isError) return <Section title="Taste map (advanced)"><p className="text-sm text-muted">Not produced yet.</p></Section>;
+  if (q.isError) return <Section title="Taste map (advanced)"><p className="text-sm text-muted">{uid ? "You can only place your own account (sign in first) or the demo account." : "Not produced yet."}</p>{uid && <button className="mt-2 text-sm underline" onClick={() => setUid("")}>Show the map without a user</button>}</Section>;
   const pts = q.data?.points ?? [];
   const genres = Array.from(new Set(pts.map((p) => p.genre))).slice(0, 8);
   const color = (g: string) => COLORS[genres.indexOf(g)] ?? "#555";
