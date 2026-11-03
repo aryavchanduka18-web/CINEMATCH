@@ -23,7 +23,7 @@
   film's own TMDB logo. Hover (desktop only, after a short delay) shows actions and a one-line reason;
   touch devices get a visible chevron instead, never hover-only controls.
 - Hero: blurred artwork tinted with the film's dominant color (computed offline with Pillow, because
-  reading pixels in the browser from another site is blocked). No Play button: CineMatch recommends,
+  reading pixels in the browser from another site is blocked). No Play button: FlickRaven recommends,
   it does not stream.
 - One accent color (crimson) only for Match %, stars and focus rings; no gradients, neon or glow.
 

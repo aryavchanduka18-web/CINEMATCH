@@ -1,6 +1,6 @@
 """In-memory failure counter with lockout, for sign-in and sign-up.
 
-Kept in process memory: CineMatch runs as one web process, so one counter is enough. A restart
+Kept in process memory: FlickRaven runs as one web process, so one counter is enough. A restart
 clears it, which is acceptable for a project of this size (see docs/decisions-log.md).
 """
 import math

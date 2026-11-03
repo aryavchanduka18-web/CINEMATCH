@@ -54,7 +54,7 @@ Now it is content similarity alone, the same for every user: content cosine + 0.
 Hindi films (Amar Akbar Anthony, Khakee, Karan Arjun). Scenario test 13 guards it.
 
 ## Cast and crew pages
-`/person/:id`: photo, roles, number of CineMatch films, known-for titles, then "Recommended for you"
+`/person/:id`: photo, roles, number of FlickRaven films, known-for titles, then "Recommended for you"
 (their unrated films the recommender scores highest) and the filmography with All / Acting /
 Directing / Writing tabs. Match % appears only where the engine scores the film.
 

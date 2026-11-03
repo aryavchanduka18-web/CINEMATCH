@@ -1,6 +1,6 @@
-# Putting CineMatch online with Render
+# Putting FlickRaven online with Render
 
-This guide takes CineMatch from your laptop to a public web address. You do every step yourself in
+This guide takes FlickRaven from your laptop to a public web address. You do every step yourself in
 your browser and one terminal window. Nothing here costs money on the free plans, and nothing in the
 repository contains a password or key.
 
@@ -93,7 +93,7 @@ already there, and finishes a bundle upload that stopped half way.
 - The free web service **sleeps after 15 minutes without visitors**. The next visit wakes it, which takes
   about a minute. Open the site a few minutes before a demo.
 - Render's free database expires after 30 days and is deleted 14 days later, so the database now lives on
-  **Neon** (free plan, no expiry, 1 GB per project; CineMatch uses about 240 MB). See "Database on Neon" below.
+  **Neon** (free plan, no expiry, 1 GB per project; FlickRaven uses about 240 MB). See "Database on Neon" below.
 - Sign-in lockout counters are kept in the server's memory, so a restart clears them.
 - There is no email service, so the site cannot send password reset or verification emails.
 
@@ -133,7 +133,7 @@ Neon's free compute pauses after about 5 minutes idle and wakes in under a secon
 |---|---|
 | Build fails on Render | Open the service's **Logs**. Most often a download timed out: click **Manual Deploy**, then **Deploy latest commit**. |
 | `/api/health` shows `"db":"error"` | The database is still starting, or the service lost its `DATABASE_URL`. In the **Environment** tab, `DATABASE_URL` must be the Neon URL. |
-| `upload` says the database has no CineMatch tables | The service has not finished its first start. Wait for **Live**, then run `upload` again. |
+| `upload` says the database has no FlickRaven tables | The service has not finished its first start. Wait for **Live**, then run `upload` again. |
 | `upload` stops with "SSL connection has been closed unexpectedly" | Run the same `upload` command again. It skips what is done and continues with the missing parts. |
 | `upload` cannot connect | Use the Neon URL with `sslmode=require` and check that Docker Desktop is running. |
 | Home page shows no rails after the upload | Restart the service (Step 2.4). The logs should show `unpacked artifact bundle` and `recommender engine ready`. |

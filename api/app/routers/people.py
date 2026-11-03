@@ -1,4 +1,4 @@
-"""Cast and crew pages: a person and their films in the CineMatch catalog."""
+"""Cast and crew pages: a person and their films in the FlickRaven catalog."""
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import text
 from sqlalchemy.orm import Session

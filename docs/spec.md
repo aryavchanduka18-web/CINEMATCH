@@ -1,4 +1,4 @@
-# CineMatch Spec
+# FlickRaven Spec
 
 **Version 1.1. Approved by Aryav on 2026-10-07 with the changes listed below. No more redesign; build from this.**
 
@@ -16,7 +16,7 @@ Change log:
 
 ## 1. Product
 
-**One line (for the report):** CineMatch is an explainable hybrid movie recommendation engine that combines content-based filtering, collaborative filtering, matrix factorization, implicit and explicit feedback, cold-start adaptation and diversity-aware reranking to give personalized, user-controllable movie discovery.
+**One line (for the report):** FlickRaven is an explainable hybrid movie recommendation engine that combines content-based filtering, collaborative filtering, matrix factorization, implicit and explicit feedback, cold-start adaptation and diversity-aware reranking to give personalized, user-controllable movie discovery.
 
 **What it is:** a movie discovery website whose job is to show a recommendation engine working. It is **not** a streaming site.
 - No video player, no Play button, no playback, no trailers hosted by us.
@@ -95,9 +95,9 @@ Change log:
 | **Wikidata** | Awards (won / nominated) | Free, no key. Matched by TMDB movie id (property P4947). Award received = P166, nominated for = P1411. |
 | Not used | OMDb, critic scores, any scraping, the piracy site in the reference screenshots | |
 
-**Rating scale:** MovieLens 0.5–5.0 stars × 2 = CineMatch 1–10. The site's 5-star widget with half stars gives exactly the same 10 levels.
+**Rating scale:** MovieLens 0.5–5.0 stars × 2 = FlickRaven 1–10. The site's 5-star widget with half stars gives exactly the same 10 levels.
 
-**Implicit data, stated honestly in the report:** "Implicit training signals are derived from explicit ratings for offline experiments. Live CineMatch implicit feedback comes from real user interactions."
+**Implicit data, stated honestly in the report:** "Implicit training signals are derived from explicit ratings for offline experiments. Live FlickRaven implicit feedback comes from real user interactions."
 
 ### 4.2 Catalog (product catalog; size set by the rules below, measured in the catalog audit)
 The **product catalog** is everything the website can show. The **evaluation universe** (section 12) is only the MovieLens-linked part A films in the ratings sample, so model comparisons stay fair however large the product catalog grows.
@@ -109,7 +109,7 @@ The **product catalog** is everything the website can show. The **evaluation uni
 | C. Recent releases | Releases from the 18 months before the **catalog build date** (MovieLens 32M stops at 12 October 2023), with a minimum TMDB vote count | ~475 |
 | D. Hollywood enrichment | Famous US films missing from A, B and C. A film is a candidate if the US is among its TMDB production countries (co-productions count). It qualifies if TMDB votes ≥ 2,000, or ≥ 1,000 and released before 1990, or ≥ 1,000 and part of a TMDB collection (franchise). "Franchise" means only that TMDB's `belongs_to_collection` field is set; no film is judged a franchise by hand. No minimum vote average: famous films count even if they are poorly rated. Thresholds live in `pipeline/catalog_config.yaml` | measured |
 
-- **Hollywood coverage is a product-catalog goal**, not a requirement that every Hollywood film has collaborative ratings. Films without MovieLens ratings (parts B, C and D) are recommended through content, popularity and live site feedback, which is how CineMatch demonstrates new-movie cold start.
+- **Hollywood coverage is a product-catalog goal**, not a requirement that every Hollywood film has collaborative ratings. Films without MovieLens ratings (parts B, C and D) are recommended through content, popularity and live site feedback, which is how FlickRaven demonstrates new-movie cold start.
 - **Catalog audit:** the pipeline writes `artifacts/metrics/catalog_audit.json` and `docs/catalog-audit.md`: size of each part, films per language, US candidates found, how many were already in A, how many were added as D, how many failed the gate and why, measured coverage of the top 500 and top 1,000 US films by TMDB votes, and the list of top-1,000 films still missing with the reason for each. Claims about coverage use only these measured numbers.
 
 - **Metadata gate** (every film): poster, English overview of at least 15 words, at least 1 genre, a director, at least 3 cast members. A backdrop is optional (fallback: blurred poster). *Amended 2026-10-08 (Aryav): at least 10 words and at least 1 cast member; films that pass only the relaxed gate are added on top of the original cut and stay outside the evaluation backbone (see docs/decisions-log.md).*
@@ -258,7 +258,7 @@ The mode is saved in `user_preferences.discovery_mode`.
 | User CF | 14 people with similar taste rated this 8+ | real neighbor count |
 | SVD / ALS | Fits the kind of films you rate highly | the user's top genre among high ratings |
 | Preferences | Matches your interest in Korean thrillers | onboarding answers |
-| Popularity | Loved by CineMatch viewers | none |
+| Popularity | Loved by FlickRaven viewers | none |
 | Rerank | Adds variety to your list | the genre it adds |
 
 ### 6.12 Freshness
@@ -302,7 +302,7 @@ Dropped from v1.0: **Trending Now** (no live trend data; merged into New & Notab
 
 ### 8.1 Navigation
 ```
-[CineMatch logo]  Home  Discover  Genres  My List  Activity        [search]  [avatar]
+[FlickRaven logo]  Home  Discover  Genres  My List  Activity        [search]  [avatar]
 ```
 - Active tab: light pill, dark text. Inactive: plain. Hover: subtle gray pill.
 - Navbar: slightly see-through at the top of the page, solid near-black after about 80 px of scroll.
@@ -343,7 +343,7 @@ Dropped from v1.0: **Trending Now** (no live trend data; merged into New & Notab
 - On scroll: the hero compresses and the navbar turns solid.
 
 ### 8.6 Visual identity
-- Colors: background `#080808`, surface `#141414`, surface 2 `#1B1B1B`, text `#FFFFFF`, muted `#A7A7A7`. Accent: CineMatch crimson about `#C8102E` (hover `#E0263F`), used for Match %, active rating stars and focus rings, never for large blocks.
+- Colors: background `#080808`, surface `#141414`, surface 2 `#1B1B1B`, text `#FFFFFF`, muted `#A7A7A7`. Accent: FlickRaven crimson about `#C8102E` (hover `#E0263F`), used for Match %, active rating stars and focus rings, never for large blocks.
 - Fonts (free): Inter for interface text; Inter Tight or Manrope for titles.
 - Motion: 150–250 ms for interactions, 400–600 ms for the hero. Respect `prefers-reduced-motion`.
 - **Not allowed:** purple or blue "AI" gradients, neon, glowing borders, floating blobs, gradient headline text, glass everywhere, oversized pills, 3D tilt cards, particles, constant motion, bounce effects, generic dashboard layouts.

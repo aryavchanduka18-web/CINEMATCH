@@ -10,7 +10,7 @@ export const field = "w-full rounded-md border border-white/15 bg-surface-2 px-3
 /** The server's own sentence, with a friendlier fallback when the network itself failed. */
 export function errorText(e: unknown): string {
   if (e instanceof ApiError) return e.message;
-  return "Could not reach CineMatch. Check your connection and try again.";
+  return "Could not reach FlickRaven. Check your connection and try again.";
 }
 
 export function AuthPage({ mode }: { mode: "login" | "register" }) {
@@ -52,7 +52,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
         {mode === "login" ? <>New here? <Link to="/register" className="text-white underline">Create an account</Link></> : <>Have an account? <Link to="/login" className="text-white underline">Sign in</Link></>}
       </p>
       {mode === "login" && (
-        <p className="mt-3 text-xs text-muted">Forgot your password? CineMatch has no email service yet, so passwords cannot be reset by email.</p>
+        <p className="mt-3 text-xs text-muted">Forgot your password? FlickRaven has no email service yet, so passwords cannot be reset by email.</p>
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-# CineMatch architecture
+# FlickRaven architecture
 
 ```
              OFFLINE (pipeline/, run by us)

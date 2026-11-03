@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cinematch-pipeline"
 version = "0.1.0"
-description = "CineMatch offline data pipeline"
+description = "FlickRaven offline data pipeline"
 requires-python = ">=3.12"
 dependencies = [
     "cinematch-engine",

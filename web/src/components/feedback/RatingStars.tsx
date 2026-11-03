@@ -3,7 +3,7 @@ import { useEffect, useState, type KeyboardEvent } from "react";
 
 type Props = { value: number | null; onChange: (rating: number | null) => void; size?: number };
 
-/** 5 stars with half steps = the CineMatch 1-10 scale (half a star = 1 point).
+/** 5 stars with half steps = the FlickRaven 1-10 scale (half a star = 1 point).
  *  Tap or click any star to set or change the rating at once; "Clear" removes it. Keyboard: the arrow keys
  *  move by one point, Home/End jump to 1 and 10, Delete clears. */
 export default function RatingStars({ value: server, onChange, size = 30 }: Props) {

@@ -10,7 +10,7 @@ import { agreementLabel } from "../../lib/confidence";
 import { useUI } from "../layout/ui";
 
 /** Top 5 picks, rotating. Blurred artwork + a subtle tint from the precomputed dominant color.
- *  No Play button: CineMatch recommends, it does not stream (spec 8.5). */
+ *  No Play button: FlickRaven recommends, it does not stream (spec 8.5). */
 export default function Hero({ items }: { items: RecItem[] }) {
   const [i, setI] = useState(0);
   const logEvent = useLogEvent();

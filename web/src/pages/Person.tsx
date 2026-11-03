@@ -42,7 +42,7 @@ export default function Person() {
         <div>
           <h1 className="font-display text-4xl font-extrabold md:text-5xl">{p.name}</h1>
           <p className="mt-2 text-white/80">{roles.join(" · ")}</p>
-          <p className="mt-1 text-sm text-muted">{p.film_count} CineMatch {p.film_count === 1 ? "film" : "films"}</p>
+          <p className="mt-1 text-sm text-muted">{p.film_count} FlickRaven {p.film_count === 1 ? "film" : "films"}</p>
           {p.known_for_titles.length > 0 && (
             <p className="mt-3 max-w-2xl text-sm text-white/75">
               Known for{" "}

@@ -1,4 +1,4 @@
-# CineMatch in one container: the built website plus the FastAPI server that also serves it.
+# FlickRaven in one container: the built website plus the FastAPI server that also serves it.
 # Model artifacts and the film catalog are NOT in the image; they live in the hosted database
 # (see docs/deploy.md and scripts/deploy_data.py).
 

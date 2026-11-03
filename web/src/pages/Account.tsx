@@ -135,7 +135,7 @@ export default function Account() {
       </Section>
 
       <p className="text-xs text-muted">
-        Password reset by email and email verification are not available: CineMatch has no email service. They are listed as future work.
+        Password reset by email and email verification are not available: FlickRaven has no email service. They are listed as future work.
       </p>
     </div>
   );

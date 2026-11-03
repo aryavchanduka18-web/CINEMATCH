@@ -1,6 +1,6 @@
 # Offline data pipeline
 
-Builds the CineMatch catalog and training data (spec section 4.5). Run from the repo root:
+Builds the FlickRaven catalog and training data (spec section 4.5). Run from the repo root:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pipeline.run_all            # every implemented step, in order

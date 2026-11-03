@@ -2,7 +2,7 @@
 
 ## 1. The three parts and how they talk
 
-CineMatch has three running parts:
+FlickRaven has three running parts:
 
 1. **The website** (React). This is what the user sees in the browser: the pages, the tabs, the movie cards.
 2. **The API** (FastAPI, Python). This is the "brain" in the middle. The website asks it questions like

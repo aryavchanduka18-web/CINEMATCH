@@ -26,8 +26,8 @@ function useScrolled(threshold = 80) {
 
 export function Logo() {
   return (
-    <Link to="/" className="font-display text-xl font-extrabold tracking-tight text-white" aria-label="CineMatch home">
-      Cine<span className="text-accent">Match</span>
+    <Link to="/" className="font-display text-xl font-extrabold tracking-tight text-white" aria-label="FlickRaven home">
+      Flick<span className="text-accent">Raven</span>
     </Link>
   );
 }
