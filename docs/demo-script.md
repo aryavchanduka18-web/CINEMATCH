@@ -1,7 +1,7 @@
 # Demo script (spec section 17)
 
 Before the demo: start Docker Desktop, then `scripts\db.ps1`, `scripts\api.ps1`, `scripts\web.ps1`,
-open http://localhost:5173 (or the live site, https://cinematch-16hy.onrender.com; open it a few
+open http://localhost:5173 (or the live site, https://flickraven.onrender.com; open it a few
 minutes early, the free plan sleeps after 15 minutes). The prepared account is `demo@cinematch.local` (password in `.env`,
 `DEMO_PASSWORD`; rebuild it with `.\.venv\Scripts\python.exe -m pipeline.demo_accounts`).
 

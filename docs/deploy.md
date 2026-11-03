@@ -34,7 +34,7 @@ free plan fits. The database uses about 240 MB of the free plan's 1 GB.
 1. Open <https://dashboard.render.com>, click **New**, then **Blueprint**.
 2. Pick the `CINEMATCH` repository. Render finds `render.yaml` and shows the `cinematch` web service.
 3. Render asks for two values: `DATABASE_URL` (the Neon URL, see "Database on Neon") and `WEB_ORIGIN`.
-   Type `https://cinematch.onrender.com` for the second.
+   Type `https://flickraven.onrender.com` for the second.
    (If Render gives the service a different address, change this value to that address in the
    service's **Environment** tab. The site works in the meantime.)
 4. Click **Apply**. Render creates the database, builds the Docker image (about 5 to 10 minutes the
