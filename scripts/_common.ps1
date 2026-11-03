@@ -1,4 +1,4 @@
-# Shared helpers for the CineMatch scripts. Dot-source this file: . "$PSScriptRoot\_common.ps1"
+# Shared helpers for the FlickRaven scripts. Dot-source this file: . "$PSScriptRoot\_common.ps1"
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $Python = Join-Path $Root ".venv\Scripts\python.exe"

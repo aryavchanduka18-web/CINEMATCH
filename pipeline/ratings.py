@@ -9,7 +9,7 @@ TRAIN_PCT, VAL_PCT = 70, 10   # test gets the remaining newest 20%
 
 
 def scale_to_10(stars: pd.Series) -> pd.Series:
-    """MovieLens 0.5-5.0 stars x 2 = CineMatch 1-10."""
+    """MovieLens 0.5-5.0 stars x 2 = FlickRaven 1-10."""
     return (stars.astype("float32") * 2).round().astype("int8")
 
 

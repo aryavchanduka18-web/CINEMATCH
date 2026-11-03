@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cinematch-api"
 version = "0.1.0"
-description = "CineMatch FastAPI backend"
+description = "FlickRaven FastAPI backend"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",

@@ -74,7 +74,7 @@ export default function Movie() {
           {m.in_profile && (
             <p className="rounded-lg border border-white/10 bg-surface px-4 py-3 text-sm text-white/85">
               {m.user_state.rating != null ? `You rated this ${m.user_state.rating}/10. ` : m.user_state.reaction > 0 ? "You liked this. " : "You marked this as not for you. "}
-              It is part of your taste profile, so CineMatch does not recommend it back to you; it shapes your other recommendations.
+              It is part of your taste profile, so FlickRaven does not recommend it back to you; it shapes your other recommendations.
             </p>
           )}
           <WhyThis reasons={m.why} />

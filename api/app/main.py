@@ -34,7 +34,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="CineMatch API", version=settings.app_version, lifespan=lifespan)
+app = FastAPI(title="FlickRaven API", version=settings.app_version, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

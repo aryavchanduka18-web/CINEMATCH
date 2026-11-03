@@ -2,7 +2,7 @@
 
 ## 1. What was built
 
-An offline pipeline (`pipeline/`) that turns three public data sources into the CineMatch catalog
+An offline pipeline (`pipeline/`) that turns three public data sources into the FlickRaven catalog
 and the training data. Run it with `scripts\data.ps1` (or `python -m pipeline.run_all`).
 
 | Step | What it does | Result on 2026-10-08 |
@@ -70,7 +70,7 @@ recommendations and the explanations dishonest.
 
 ## 4. Ratings preparation and splits
 
-- MovieLens stars (0.5 to 5.0) are multiplied by 2, giving the CineMatch 1-10 scale. Half stars
+- MovieLens stars (0.5 to 5.0) are multiplied by 2, giving the FlickRaven 1-10 scale. Half stars
   map exactly to whole numbers, so nothing is lost.
 - We keep ratings on the evaluation backbone only (part A films that passed the original gate), keep users with at least 20 of them, and sample
   **30,000 users** with a fixed random seed (42). All models train on the same sample, so the

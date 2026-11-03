@@ -1,4 +1,4 @@
-/* CineMatch design tokens (spec section 8.6). Accent is for Match %, active stars and focus rings only. */
+/* FlickRaven design tokens (spec section 8.6). Accent is for Match %, active stars and focus rings only. */
 :root {
   --cm-bg: #080808;
   --cm-surface: #141414;

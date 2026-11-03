@@ -1,4 +1,4 @@
-# CineMatch
+# FlickRaven
 
 An explainable hybrid movie recommendation website (college Recommender Systems project).
 It recommends movies; it does not stream them.

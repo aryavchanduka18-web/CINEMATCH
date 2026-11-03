@@ -49,7 +49,7 @@ def explain(item: int, shares: dict[str, float], liked: np.ndarray, content_sim:
                 out.append(Reason(source, "fits_taste", "Fits the kind of films you rate highly", share,
                                   {"top_genre": top_genre}))
         elif source == "popularity":
-            out.append(Reason(source, "loved_by_viewers", "Loved by CineMatch viewers", share, {}))
+            out.append(Reason(source, "loved_by_viewers", "Loved by FlickRaven viewers", share, {}))
         if len(out) == MAX_REASONS:
             break
     if preferences and len(out) < MAX_REASONS:

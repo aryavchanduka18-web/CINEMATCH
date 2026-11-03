@@ -1,10 +1,10 @@
-# CineMatch: an explainable hybrid movie recommender
+# FlickRaven: an explainable hybrid movie recommender
 
 *Recommender Systems mini project. Every number in this report is read from a file in `artifacts/`
 produced by the pipeline; the detailed tables are in `docs/phase-3-results.md` to `docs/phase-6-results.md`.*
 
 ## Abstract
-CineMatch is an explainable hybrid movie recommendation engine that combines content-based filtering,
+FlickRaven is an explainable hybrid movie recommendation engine that combines content-based filtering,
 collaborative filtering, matrix factorization, implicit and explicit feedback, cold-start adaptation and
 diversity-aware reranking to give personalized, user-controllable movie discovery. On a time-split test
 of 5,000 MovieLens users with full ranking over 9,495 films, the hybrid reaches NDCG@10 = 0.163

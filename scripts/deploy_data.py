@@ -200,7 +200,7 @@ def upload(target: str | None, refresh: bool = False) -> None:
         conn.execute(text("SELECT count(*) FROM movies")).scalar() if conn.execute(
             text("SELECT to_regclass('movies')")).scalar() else 0))
     if state[0] is None:
-        sys.exit("That database has no CineMatch tables yet. Deploy the web service first (it creates them), "
+        sys.exit("That database has no FlickRaven tables yet. Deploy the web service first (it creates them), "
                  "wait until it is live, then run this again.")
     has_movies = state[1] > 0
 

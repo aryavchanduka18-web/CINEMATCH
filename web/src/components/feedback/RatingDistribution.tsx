@@ -1,4 +1,4 @@
-/** Ratings on the 1-10 scale, one bar per value (MovieLens + CineMatch ratings). */
+/** Ratings on the 1-10 scale, one bar per value (MovieLens + FlickRaven ratings). */
 export default function RatingDistribution({ hist }: { hist: number[] }) {
   const max = Math.max(1, ...hist);
   const total = hist.reduce((a, b) => a + b, 0);

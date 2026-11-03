@@ -17,7 +17,7 @@ from pipeline.common import PROCESSED, WIKIDATA_DIR, get_logger
 
 log = get_logger("04_awards")
 ENDPOINT = "https://query.wikidata.org/sparql"
-USER_AGENT = "CineMatchCollegeProject/0.1 (https://github.com/aryavchanduka18-web/CINEMATCH; student recommender-systems project)"
+USER_AGENT = "FlickRavenCollegeProject/0.1 (https://github.com/aryavchanduka18-web/CINEMATCH; student recommender-systems project)"
 BATCH = 300
 
 QUERY = """

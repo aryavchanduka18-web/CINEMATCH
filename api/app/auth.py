@@ -21,7 +21,7 @@ COOKIE = "cm_session"
 MAX_AGE = 60 * 60 * 24 * 30          # 30 days
 
 COMMON_PASSWORDS = {"password", "password1", "password123", "12345678", "123456789", "1234567890", "qwerty123",
-                    "qwertyuiop", "iloveyou1", "letmein1", "welcome1", "abc12345", "11111111", "cinematch1"}
+                    "qwertyuiop", "iloveyou1", "letmein1", "welcome1", "abc12345", "11111111", "cinematch1", "flickraven1"}
 
 
 def hash_password(password: str) -> str:
