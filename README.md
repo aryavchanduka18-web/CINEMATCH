@@ -3,7 +3,7 @@
 An explainable hybrid movie recommendation website (college Recommender Systems project).
 It recommends movies; it does not stream them.
 
-**Live:** https://cinematch-16hy.onrender.com (Render free plan: the first visit after 15 quiet minutes takes about a
+**Live:** https://flickraven.onrender.com (Render free plan: the first visit after 15 quiet minutes takes about a
 minute). How it is hosted and how to update it: `docs/deploy.md`.
 
 What a visitor can do: create an account (or browse as a guest), rate, like, dislike (with a reason), save to My
