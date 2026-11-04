@@ -17,7 +17,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 \
     OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
     # fewer malloc arenas: each request thread would otherwise keep its own heap
     MALLOC_ARENA_MAX=2 \
-    PRELOAD_ENGINE=true
+    PRELOAD_ENGINE=true \
+    RUN_CLEANUP=true
 WORKDIR /app
 COPY engine/ engine/
 RUN pip install ./engine

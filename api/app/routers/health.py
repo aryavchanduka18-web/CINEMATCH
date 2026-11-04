@@ -18,3 +18,10 @@ def health(db: Session = Depends(get_db)) -> dict:
     except SQLAlchemyError:
         db_status = "error"
     return {"status": "ok", "db": db_status, "version": get_settings().app_version}
+
+@router.get("/ping")
+def ping() -> dict:
+    """Keep-awake check for uptime monitors. It never touches the database, so pinging it every few
+    minutes keeps the web service awake without keeping the Neon database awake (Neon's free plan
+    counts the hours the database is awake)."""
+    return {"status": "ok"}

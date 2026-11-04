@@ -14,3 +14,13 @@ hollywood:
 franchise:
   min_vote_count: 200
   min_runtime_min: 60
+# Monthly new releases (approved by Aryav 2026-11-04): films released in the last lookback_months, found per
+# language through TMDB discover, are added as part C ("new & notable") when they pass the metadata gate.
+# Like the franchise rule they sit outside the evaluation universe (no MovieLens ratings), so models and
+# results do not change; they are recommended through content similarity. pipeline/new_releases.py
+new_releases:
+  lookback_months: 6
+  min_votes: 100                    # English and the larger languages
+  min_votes_low_volume: 20          # part_b low_volume_languages and the boost languages (ta, te, ml, kn)
+  max_per_language: 40              # newest month's most-voted films per language
+  min_runtime_min: 60

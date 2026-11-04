@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { api, send } from "../api/client";
 import type { RecItem } from "../api/types";
 import { CardArtwork } from "../components/card/MovieCard";
@@ -34,7 +34,12 @@ export default function Onboarding() {
     <div className="mx-auto max-w-[1400px] px-4 pb-24 pt-24 md:px-10">
       <p className="text-sm text-muted">Step {step + 1} of 4</p>
       <h1 className="mt-1 font-display text-3xl font-extrabold">{STEPS[step]}</h1>
-      {step === 0 && <p className="mt-2 text-sm text-muted">Pick 5 to 10 films you like. {picks.length}/10 picked.</p>}
+      {step === 0 && (
+        <p className="mt-2 text-sm text-muted">
+          Pick 5 to 10 films you like. {picks.length}/10 picked. Use Letterboxd or IMDb? You can also{" "}
+          <Link to="/account#import" className="text-white underline">import your ratings</Link> after this.
+        </p>
+      )}
       <div className="mt-6">
         {data.isLoading && <p className="text-muted">Loading films…</p>}
         {step === 0 && data.data && (

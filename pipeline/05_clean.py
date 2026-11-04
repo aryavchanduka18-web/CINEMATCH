@@ -49,6 +49,15 @@ def load_franchise_candidates() -> tuple[pd.DataFrame, dict]:
     return gate(pd.read_csv(path).drop(columns=["franchise"], errors="ignore"))
 
 
+def load_new_release_candidates() -> tuple[pd.DataFrame, dict]:
+    """Recent films found by pipeline/new_releases.py, gated like the other candidates. Kept apart from
+    the main pool, like the franchise candidates, so the original selection cannot change."""
+    path = PROCESSED / "new_release_candidates.csv"
+    if not path.exists():
+        return pd.DataFrame(columns=["tmdb_id", "passed", "status", "release_date", "part"]), {}
+    return gate(pd.read_csv(path)[["tmdb_id", "tmdb_vote_count", "part"]])
+
+
 def gate(cand: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     details, rows = {}, []
     for tmdb_id in cand["tmdb_id"].unique():
@@ -150,6 +159,15 @@ def main() -> None:
     catalog = pd.concat([catalog.assign(franchise_rule=False),
                          fr.assign(part="D", ml_movie_id=pd.NA, relaxed_gate=False, franchise_rule=True)],
                         ignore_index=True)
+    # Then the monthly new releases (pipeline/new_releases.py), as part C, after the build date.
+    nr_gated, nr_details = load_new_release_candidates()
+    details |= nr_details
+    nr = nr_gated[nr_gated["passed"].fillna(False).astype(bool) & (nr_gated["status"] == "Released")
+                  & (pd.to_datetime(nr_gated["release_date"]).dt.date <= date.today())
+                  & ~nr_gated["tmdb_id"].isin(catalog["tmdb_id"])].drop_duplicates("tmdb_id")
+    catalog = pd.concat([catalog, nr.assign(part="C", ml_movie_id=pd.NA, relaxed_gate=False, franchise_rule=False)],
+                        ignore_index=True)
+    log.info("new releases added %d", len(nr))
     log.info("selected %s with %s; relaxed gate added %s; franchise rule added %d", base["part"].value_counts().to_dict(),
              chosen, extra["part"].value_counts().to_dict(), len(fr))
 
@@ -179,6 +197,7 @@ def main() -> None:
         "by_part": movies["catalog_part"].value_counts().to_dict(),
         "added_by_relaxed_gate": movies.loc[movies["relaxed_gate"], "catalog_part"].value_counts().to_dict(),
         "added_by_franchise_rule": int(movies["franchise_rule"].sum()),
+        "added_as_new_releases": int(len(nr)),
         "part_b_by_language": movies[movies["catalog_part"] == "B"]["original_language"].value_counts().to_dict(),
         "candidates": int(gated["tmdb_id"].nunique()),
         "part_notes": {"A": "MovieLens films", "B": "curated international", "C": "new & notable",

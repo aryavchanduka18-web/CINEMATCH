@@ -14,7 +14,11 @@ export default function Footer() {
         </a>
         <span>This product uses the TMDB API but is not endorsed or certified by TMDB.</span>
         <span>Ratings data: MovieLens (GroupLens). Awards: Wikidata.</span>
-        <Link to="/lab" className="ml-auto hover:text-white">Research Lab</Link>
+        <span className="ml-auto flex gap-5">
+          <Link to="/privacy" className="hover:text-white">Privacy</Link>
+          <Link to="/terms" className="hover:text-white">Terms</Link>
+          <Link to="/lab" className="hover:text-white">Research Lab</Link>
+        </span>
       </div>
     </footer>
   );

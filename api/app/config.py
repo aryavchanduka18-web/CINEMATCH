@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     cookie_samesite: str = "lax"
     # Hosting: build the recommender at start-up instead of on the first request.
     preload_engine: bool = False
+    # Hosting: delete idle guests and old recommendation logs every 12 hours (app/services/cleanup.py).
+    run_cleanup: bool = False
+    # Emails allowed to open the private /stats page, comma-separated (e.g. ADMIN_EMAILS=you@gmail.com).
+    admin_emails: str = ""
 
     @field_validator("database_url")
     @classmethod

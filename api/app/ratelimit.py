@@ -55,6 +55,41 @@ LOGIN = Limiter(max_failures=5, window_s=15 * 60, lockout_s=15 * 60, what="sign-
 LOGIN_PER_IP = 20
 # 10 accounts (or failed sign-ups) from one address within an hour pause sign-up for an hour.
 REGISTER = Limiter(max_failures=10, window_s=60 * 60, lockout_s=60 * 60, what="sign-up attempts")
+# 60 guest sessions from one address within an hour pause guest creation for an hour. Generous, because a
+# college or office network shares one address; it only stops scripts filling the database with guests.
+GUEST = Limiter(max_failures=60, window_s=60 * 60, lockout_s=60 * 60, what="new visitor sessions")
+# 10 file imports per account per hour.
+IMPORT = Limiter(max_failures=10, window_s=60 * 60, lockout_s=60 * 60, what="imports")
+
+
+class Budget:
+    """At most `limit` actions per key in a sliding window; allow() says whether one more fits."""
+
+    def __init__(self, limit: int, window_s: int):
+        self.limit, self.window_s = limit, window_s
+        self._hits: dict[str, deque[float]] = {}
+        self._lock = Lock()
+
+    def allow(self, key: str) -> bool:
+        now = time.monotonic()
+        with self._lock:
+            if len(self._hits) > 50_000:          # never grow without bound
+                self._hits.clear()
+            q = self._hits.setdefault(key, deque())
+            while q and q[0] < now - self.window_s:
+                q.popleft()
+            if len(q) >= self.limit:
+                return False
+            q.append(now)
+            return True
+
+    def clear(self) -> None:
+        with self._lock:
+            self._hits.clear()
+
+
+# Page-view style events: a person browsing fast makes a few a minute; 120 a minute is a script.
+EVENTS = Budget(limit=120, window_s=60)
 
 
 def client_ip(request) -> str:
