@@ -43,16 +43,28 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
           value={password} onChange={(e) => setPassword(e.target.value)} required aria-label="Password"
           autoComplete={mode === "login" ? "current-password" : "new-password"} />
         {mode === "register" && <PasswordChecklist password={password} />}
+        {mode === "register" && (
+          <p className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
+            Keep your password safe. FlickRaven does not send emails, so a forgotten password cannot be reset and the
+            account cannot be recovered. A password manager helps.
+          </p>
+        )}
         {go.isError && <p role="alert" className="rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-300">{errorText(go.error)}</p>}
         <button className="w-full rounded-md bg-white py-2.5 text-sm font-semibold text-black disabled:opacity-60" disabled={go.isPending || !email || !password}>
           {go.isPending ? "One moment..." : mode === "login" ? "Sign in" : "Create account"}
         </button>
       </form>
+      {mode === "register" && (
+        <p className="mt-3 text-xs text-muted">
+          By creating an account you agree to the <Link to="/terms" className="underline">Terms</Link> and
+          the <Link to="/privacy" className="underline">Privacy policy</Link>.
+        </p>
+      )}
       <p className="mt-6 text-sm text-muted">
         {mode === "login" ? <>New here? <Link to="/register" className="text-white underline">Create an account</Link></> : <>Have an account? <Link to="/login" className="text-white underline">Sign in</Link></>}
       </p>
       {mode === "login" && (
-        <p className="mt-3 text-xs text-muted">Forgot your password? FlickRaven has no email service yet, so passwords cannot be reset by email.</p>
+        <p className="mt-3 text-xs text-muted">Forgot your password? FlickRaven does not send emails, so passwords cannot be reset. You can browse as a guest or make a new account.</p>
       )}
     </div>
   );

@@ -6,7 +6,7 @@ of events lives in the append-only interactions table (see activity.py).
 from datetime import datetime
 
 from sqlalchemy import (
-    Boolean, CheckConstraint, DateTime, ForeignKey, Integer, SmallInteger, Text, func, text,
+    Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, SmallInteger, Text, func, text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, CITEXT, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -28,6 +28,7 @@ def created_now() -> Mapped[datetime]:
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (Index("ix_users_guest_created_at", "created_at", postgresql_where=text("is_guest")),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     email: Mapped[str | None] = mapped_column(CITEXT, unique=True)

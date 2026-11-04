@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.auth import (check_password, clear, current_user, hash_password, issue, now_ms, password_problem,
                       user_id_from)
 from app.db import get_db
-from app.ratelimit import LOGIN, LOGIN_PER_IP, REGISTER, client_ip
+from app.ratelimit import GUEST, LOGIN, LOGIN_PER_IP, REGISTER, client_ip
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -29,7 +29,10 @@ class PasswordChange(BaseModel):
 
 
 @router.post("/guest")
-def guest(response: Response, db: Session = Depends(get_db)) -> dict:
+def guest(request: Request, response: Response, db: Session = Depends(get_db)) -> dict:
+    ip = "ip:" + client_ip(request)
+    GUEST.check(ip)
+    GUEST.fail(ip)              # every guest counts toward the per-address limit
     uid = db.execute(text("INSERT INTO users (is_guest, display_name) VALUES (true, 'Guest') RETURNING id")).scalar()
     db.commit()
     issue(response, uid)

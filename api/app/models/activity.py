@@ -29,6 +29,7 @@ class Interaction(Base):
 
 class RecommendationLog(Base):
     __tablename__ = "recommendation_logs"
+    __table_args__ = (Index("ix_recommendation_logs_created_at", "created_at"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     request_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)

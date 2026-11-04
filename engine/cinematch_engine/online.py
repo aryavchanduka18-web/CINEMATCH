@@ -23,6 +23,8 @@ from cinematch_engine.tonight import Request, recommend as tonight_recommend
 POPCORN_GENRES = {"Action", "Adventure", "Comedy", "Animation", "Science Fiction"}
 # "Indian and English" end of the International tuning slider.
 LOCAL_LANGUAGES = {"en", "hi", "ta", "te", "ml", "kn", "bn", "mr"}
+# Popularity points (1-10 scale) added to films in the user's onboarding languages, by stage (language_lift).
+LANGUAGE_LIFT = {"cold": 1.2, "warming": 0.6, "established": 0.0}
 
 
 @dataclass
@@ -180,7 +182,8 @@ class OnlineEngine:
         scores = scores or self.scores(st)
         excl = np.union1d(self.excluded(st), np.asarray(list(extra_exclude), dtype=np.int64))
         excl = np.union1d(excl, self.onboarding_constraint(st))
-        pool, norm = candidate_pool({s: v[None, :] for s, v in scores.items()}, [excl])
+        # Picking uses language-lifted scores; Match % below still comes from the unlifted scores.
+        pool, norm = candidate_pool({s: v[None, :] for s, v in self.language_lift(st, scores).items()}, [excl])
         valid = pool[0] >= 0
         pool, norm = pool[0][valid], norm[:, 0, valid]
         w = self.weights[st.stage]
@@ -210,6 +213,21 @@ class OnlineEngine:
             share = {s: float(shares[si, pos]) for si, s in enumerate(SOURCES)}
             out.append({"row": int(row), "score": float(sc), "match_pct": int(self.match(st.stage, float(catalog[row]))),
                         "shares": share, "reranked": blend_rank[int(row)] > pos + 3})
+        return out
+
+    def language_lift(self, st: UserState, scores: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+        """New users: films in the languages picked at onboarding get a popularity lift, so someone who
+        picked only Hindi does not open the site to a banner of Hollywood films. The lift fades as the user
+        gives feedback (cold full, warming half, established none). When English is picked together with
+        other languages, English gets half the lift: the catalog is mostly English already."""
+        lift = LANGUAGE_LIFT.get(st.stage, 0.0)
+        if not lift or not st.languages:
+            return scores
+        langs = set(st.languages)
+        per_lang = {l: lift * (0.5 if l == "en" and len(langs) > 1 else 1.0) for l in langs}
+        bonus = np.array([per_lang.get(l, 0.0) for l in self.cat.language], dtype=np.float32)
+        out = dict(scores)
+        out["popularity"] = scores["popularity"] + bonus
         return out
 
     def match(self, stage: str, score: float) -> int:

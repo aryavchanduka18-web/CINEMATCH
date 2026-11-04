@@ -1,8 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { send } from "../api/client";
 import { useMe } from "../api/hooks";
+import { ImportRatings } from "../components/account/ImportRatings";
 import { PasswordChecklist } from "../components/account/PasswordChecklist";
 import { PageMessage } from "../components/Loading";
 import { useUI } from "../components/layout/ui";
@@ -36,6 +37,10 @@ export default function Account() {
   const [sure, setSure] = useState(false);
 
   useEffect(() => setName(me?.display_name ?? ""), [me?.display_name]);
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (me && hash === "#import") document.getElementById("import")?.scrollIntoView({ block: "start" });
+  }, [me, hash]);
 
   const rename = useMutation({
     mutationFn: () => send("PATCH", "/me", { display_name: name }),
@@ -89,6 +94,12 @@ export default function Account() {
         </form>
       </Section>
 
+      <div id="import" className="scroll-mt-24">
+        <Section title="Import your ratings">
+          <ImportRatings />
+        </Section>
+      </div>
+
       {!me.is_guest && (
         <Section title="Change password">
           <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); change.mutate(); }}>
@@ -135,7 +146,7 @@ export default function Account() {
       </Section>
 
       <p className="text-xs text-muted">
-        Password reset by email and email verification are not available: FlickRaven has no email service. They are listed as future work.
+        FlickRaven does not send emails, so there is no password reset. Keep your password safe. See the <Link to="/privacy" className="underline">Privacy policy</Link> for what is stored.
       </p>
     </div>
   );

@@ -51,3 +51,11 @@ def test_engine(migrated_db):
     engine = create_engine(os.environ["DATABASE_URL"])
     yield engine
     engine.dispose()
+
+@pytest.fixture(autouse=True)
+def _fresh_traffic_limits():
+    """Guest, import and event limits are per address or account; tests share one address."""
+    from app.ratelimit import EVENTS, GUEST, IMPORT
+    for limiter in (GUEST, IMPORT, EVENTS):
+        limiter.clear()
+    yield

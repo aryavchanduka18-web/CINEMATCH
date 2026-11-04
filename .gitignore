@@ -23,3 +23,6 @@ graphify-out/
 
 # Deploy exports (catalog dump, demo account, model bundle): never commit
 deploy-out/
+
+# Database backups of the live site (accounts, emails): never commit
+backups/

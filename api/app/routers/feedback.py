@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import current_user
 from app.db import get_db
+from app.ratelimit import EVENTS
 from app.services import events as ev
 from app.services.events import IMPLICIT_EVENTS
 from app.services.movies import cards
@@ -117,6 +118,8 @@ def event(body: EventBody, user=Depends(current_user), db: Session = Depends(get
     """Lightweight implicit events. Hover is never logged; detail_view counts once per film per day."""
     if body.event_type not in IMPLICIT_EVENTS:
         raise HTTPException(422, f"event_type must be one of {sorted(IMPLICIT_EVENTS)}")
+    if not EVENTS.allow(f"user:{user['id']}"):
+        return {"ok": True, "dropped": True}      # too many too fast: not stored, and the page carries on
     if body.event_type == "detail_view" and body.movie_id and ev.detail_view_logged_today(db, user["id"], body.movie_id):
         return {"ok": True, "deduplicated": True}
     ev.log(db, user["id"], body.movie_id, body.event_type, None, body.source, body.position)

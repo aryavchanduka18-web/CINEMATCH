@@ -88,14 +88,69 @@ already there, and finishes a bundle upload that stopped half way.
   It updates every film by its TMDB id and adds the new ones. Nothing is deleted, so accounts, ratings and
   lists made on the site stay as they are. It also uploads the new model bundle. Then **Restart service**.
 
+## Every month (about 30 minutes)
+
+1. Start Docker Desktop, then `scripts\db.ps1`.
+2. Run `scripts\monthly_refresh.ps1`. It backs up the live database, finds films released in the last six
+   months on TMDB (English and every catalog language), adds the ones that pass the metadata gate as
+   "new & notable" films, rebuilds the catalog and the model bundle, and uploads them. Accounts and ratings
+   on the site are not touched. The new films have no MovieLens ratings, so the models and the evaluation
+   results stay the same; new films are recommended through "similar to" (content) scores.
+3. In Render: **flickraven** service, **Manual Deploy**, **Restart service**.
+
+If you skip a month nothing breaks; the catalog just stops getting newer.
+
+## Back up and restore
+
+`scripts\backup.ps1` saves the live database to `backups\flickraven-<date>.dump` on the laptop and keeps
+the newest six. `monthly_refresh.ps1` runs it first, so a monthly refresh is also a monthly backup.
+Backups contain users' emails: keep them on the laptop only.
+
+To restore (this **replaces** everything on the live site with the backup):
+
+```powershell
+$env:TARGET = "<the Neon URL, starting postgresql://>"
+docker run --rm -e TARGET -v "${PWD}\backups:/in:ro" postgres:17 sh -c 'pg_restore --clean --if-exists --no-owner --no-privileges -d "$TARGET" /in/flickraven-<date>.dump'
+Remove-Item Env:TARGET
+```
+
+Then **Restart service** on Render.
+
+## The private usage page (/stats)
+
+In Render, **Environment**, add `ADMIN_EMAILS` = the email of your FlickRaven account (several: separate
+with commas), then save (Render restarts the service). Sign in with that account and open `/stats`:
+accounts, weekly active and returning people, ratings per day, the most opened films and how full the
+database is. Everyone else gets "Page not found". It shows totals only, never one person's history.
+
+## Housekeeping and limits (automatic)
+
+- Guest sessions with no activity for 30 days are deleted, with their data. Records of which films were
+  shown to whom (`recommendation_logs`) are deleted after 60 days. This runs every 12 hours while the
+  service is awake (`RUN_CLEANUP=true` in the Dockerfile).
+- One address can start at most 60 guest sessions an hour; one account can send at most 120 page-view
+  events a minute (extra ones are dropped) and import at most 10 files an hour.
+
 ## Things to know about the free plans
 
 - The free web service **sleeps after 15 minutes without visitors**. The next visit wakes it, which takes
-  about a minute. Open the site a few minutes before a demo.
+  about a minute. A free uptime monitor keeps it awake (see "Keep the site awake" below).
+- Render gives **750 free hours a month for all free web services together**. One service awake all month
+  uses about 744, so keep only one FlickRaven service running (suspend any old one).
 - Render's free database expires after 30 days and is deleted 14 days later, so the database now lives on
   **Neon** (free plan, no expiry, 1 GB per project; FlickRaven uses about 240 MB). See "Database on Neon" below.
 - Sign-in lockout counters are kept in the server's memory, so a restart clears them.
 - There is no email service, so the site cannot send password reset or verification emails.
+
+## Keep the site awake (UptimeRobot)
+
+1. Sign up free at <https://uptimerobot.com>.
+2. **New monitor**: type **HTTP(s)**, URL `https://flickraven.onrender.com/api/ping`, interval **5 minutes**.
+3. Save. The site no longer sleeps, so visitors never wait for it to wake up.
+
+Use `/api/ping`, **not** `/api/health`. `/api/health` runs a database query, so pinging it every 5 minutes
+would keep the Neon database awake all month and use up Neon's free compute hours. `/api/ping` never
+touches the database; Neon still sleeps between real visitors.
 
 ## Database on Neon
 

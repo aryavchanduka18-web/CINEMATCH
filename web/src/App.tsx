@@ -7,11 +7,13 @@ import Discover from "./pages/Discover";
 import { Genre, Genres } from "./pages/Genres";
 import Home from "./pages/Home";
 import Lab from "./pages/Lab";
+import { Privacy, Terms } from "./pages/Legal";
 import Movie from "./pages/Movie";
 import MyList from "./pages/MyList";
 import Onboarding from "./pages/Onboarding";
 import Person from "./pages/Person";
 import Search from "./pages/Search";
+import StatsPage from "./pages/Stats";
 import { PageMessage } from "./components/Loading";
 
 export default function App() {
@@ -32,6 +34,9 @@ export default function App() {
         <Route path="/register" element={<AuthPage mode="register" />} />
         <Route path="/lab" element={<Lab />} />
         <Route path="/account" element={<Account />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/stats" element={<StatsPage />} />
         <Route path="*" element={<PageMessage title="Page not found" />} />
       </Route>
     </Routes>

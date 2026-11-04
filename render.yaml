@@ -18,3 +18,5 @@ services:
         value: "true"
       - key: WEB_ORIGIN
         sync: false        # Render asks for it: the site address, e.g. https://cinematch.onrender.com
+      - key: ADMIN_EMAILS
+        sync: false        # your FlickRaven account email: it may open the private /stats page
